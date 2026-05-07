@@ -405,12 +405,17 @@ test('resolveComposeModelPickerState keeps the model picker visible for cold cha
   });
 });
 
-test('resolveComposeExtensionWorkingDisplay renders default, custom, and hidden indicator states', () => {
+test('resolveComposeExtensionWorkingDisplay renders default working state with a spinner and preserves custom/hidden indicators', () => {
+  const css = readFileSync(join(import.meta.dir, '../../web/static/css/chat.css'), 'utf8');
+  expect(css).toContain('.compose-inline-status-spinner');
+  expect(css).toContain('animation: spin 1s linear infinite;');
+
   expect(resolveComposeExtensionWorkingDisplay(null)).toEqual({
     visible: false,
     title: '',
     indicatorText: null,
     animateDot: false,
+    animateSpinner: false,
   });
 
   expect(resolveComposeExtensionWorkingDisplay({
@@ -420,7 +425,8 @@ test('resolveComposeExtensionWorkingDisplay renders default, custom, and hidden 
     visible: true,
     title: 'Compacting context…',
     indicatorText: null,
-    animateDot: true,
+    animateDot: false,
+    animateSpinner: true,
   });
 
   expect(resolveComposeExtensionWorkingDisplay({
@@ -431,6 +437,7 @@ test('resolveComposeExtensionWorkingDisplay renders default, custom, and hidden 
     title: 'Working…',
     indicatorText: '⠙',
     animateDot: false,
+    animateSpinner: false,
   });
 
   expect(resolveComposeExtensionWorkingDisplay({
@@ -441,6 +448,7 @@ test('resolveComposeExtensionWorkingDisplay renders default, custom, and hidden 
     title: 'Background sync',
     indicatorText: null,
     animateDot: false,
+    animateSpinner: false,
   });
 });
 

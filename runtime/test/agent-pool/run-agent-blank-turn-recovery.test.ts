@@ -105,6 +105,72 @@ test("runAgentPrompt retries a blank user-only session delta and returns the rec
   }
 });
 
+test("runAgentPrompt treats terminal UI side-effect tools as successful even after lead-in text", async () => {
+  const restoreEnv = setEnv({
+    PICLAW_TURN_AUTO_RECOVERY_ENABLED: "1",
+    PICLAW_TURN_AUTO_RECOVERY_MAX_ATTEMPTS: "2",
+    PICLAW_TURN_AUTO_RECOVERY_TOTAL_BUDGET_MS: "30000",
+  });
+
+  try {
+    class StubSession {
+      private listeners: Array<(event: any) => void> = [];
+      sessionManager = {
+        getLeafId: () => "leaf-1",
+        getEntries: () => this.entries,
+      };
+      isStreaming = false;
+      isCompacting = false;
+      isRetrying = false;
+      promptCalls = 0;
+      private entries: Array<any> = [];
+
+      subscribe(listener: (event: any) => void) {
+        this.listeners.push(listener);
+        return () => {
+          this.listeners = this.listeners.filter((entry) => entry !== listener);
+        };
+      }
+
+      async prompt() {
+        this.promptCalls += 1;
+        this.entries.push({ type: "message", message: { role: "user" } });
+        this.entries.push({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "I'll post a widget." }] } });
+        for (const listener of this.listeners) {
+          listener({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "I'll post a widget." } });
+          listener({ type: "tool_execution_end", toolName: "send_dashboard_widget", toolCallId: "tool-1", isError: false });
+          listener({ type: "message_end", message: { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", name: "send_dashboard_widget" }] } });
+        }
+      }
+
+      async abort() {}
+    }
+
+    const session = new StubSession();
+    const turnCoordinator = new AgentTurnCoordinator({
+      takeAttachments: () => [],
+      touchSession: () => {},
+      recordMessageUsage: () => {},
+    });
+
+    const result = await runAgentPrompt("post widget", "web:default", { timeoutMs: 0 }, {
+      getOrCreateRuntime: async () => createRuntime(session) as any,
+      turnCoordinator,
+      clearAttachments: () => {},
+      takeAttachments: () => [],
+      logsDir: "/workspace/logs",
+      setActiveForkBaseLeaf: () => {},
+      clearActiveForkBaseLeaf: () => {},
+    });
+
+    expect(session.promptCalls).toBe(1);
+    expect(result.status).toBe("tool_complete");
+    expect(result.recovery).toBeUndefined();
+  } finally {
+    restoreEnv();
+  }
+});
+
 test("runAgentPrompt exhausts recovery when repeated blank user-only deltas persist", async () => {
   const restoreEnv = setEnv({
     PICLAW_TURN_AUTO_RECOVERY_ENABLED: "1",

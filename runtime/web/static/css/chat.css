@@ -245,6 +245,16 @@
     animation: composeStatusDotPulse 1.4s ease-out infinite;
 }
 
+.compose-inline-status-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--turn-color, var(--accent-color));
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    flex: 0 0 auto;
+}
+
 .compose-inline-status.compaction .compose-inline-status-dot {
     background: var(--warning-color, #f59e0b);
 }
@@ -271,7 +281,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .compose-inline-status-dot.compose-inline-status-dot-pulsing {
+    .compose-inline-status-dot.compose-inline-status-dot-pulsing,
+    .compose-inline-status-spinner {
         animation: none;
     }
 }

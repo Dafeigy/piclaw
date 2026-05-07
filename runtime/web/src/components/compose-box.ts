@@ -237,6 +237,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
             title: '',
             indicatorText: null,
             animateDot: false,
+            animateSpinner: false,
         };
     }
 
@@ -253,6 +254,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
             title: '',
             indicatorText: null,
             animateDot: false,
+            animateSpinner: false,
         };
     }
 
@@ -262,6 +264,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
             title: message || 'Working…',
             indicatorText: null,
             animateDot: false,
+            animateSpinner: false,
         };
     }
 
@@ -273,6 +276,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
             title: message || 'Working…',
             indicatorText: frames[safeIndex],
             animateDot: false,
+            animateSpinner: false,
         };
     }
 
@@ -280,7 +284,8 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
         visible: true,
         title: message || 'Working…',
         indicatorText: null,
-        animateDot: true,
+        animateDot: false,
+        animateSpinner: true,
     };
 }
 
@@ -2758,9 +2763,11 @@ export function ComposeBox({
                     <div class="compose-inline-status-row">
                         ${extensionWorkingDisplay.indicatorText
                             ? html`<span class="compose-inline-status-glyph" aria-hidden="true">${extensionWorkingDisplay.indicatorText}</span>`
-                            : extensionWorkingDisplay.animateDot
-                                ? html`<span class=${buildComposeStatusDotClass({ pulsing: true })} aria-hidden="true"></span>`
-                                : null}
+                            : extensionWorkingDisplay.animateSpinner
+                                ? html`<div class="compose-inline-status-spinner" aria-hidden="true"></div>`
+                                : extensionWorkingDisplay.animateDot
+                                    ? html`<span class=${buildComposeStatusDotClass({ pulsing: true })} aria-hidden="true"></span>`
+                                    : null}
                         <span class="compose-inline-status-title">${extensionWorkingDisplay.title}</span>
                     </div>
                 </div>
