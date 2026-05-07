@@ -39,6 +39,7 @@ class FakeElement extends FakeNode {
   localName: string;
   childNodes: FakeNode[] = [];
   attributes: Array<{ name: string; value: string }> = [];
+  innerHTML = '';
   style = {
     cssText: '',
     setProperty: () => {},
@@ -128,11 +129,15 @@ class FakeDocument {
 const originalWindow = (globalThis as any).window;
 const originalDocument = (globalThis as any).document;
 const originalElement = (globalThis as any).Element;
+const originalDOMParser = (globalThis as any).DOMParser;
+const originalNodeFilter = (globalThis as any).NodeFilter;
 
 afterEach(() => {
   (globalThis as any).window = originalWindow;
   (globalThis as any).document = originalDocument;
   (globalThis as any).Element = originalElement;
+  (globalThis as any).DOMParser = originalDOMParser;
+  (globalThis as any).NodeFilter = originalNodeFilter;
 });
 
 test('expanded thought, draft, and live tool-output panels keep constrained scroll containers', () => {
@@ -152,6 +157,53 @@ test('tool output panel keeps a tighter 5-line collapsed preview cap', () => {
   const source = readFileSync(join(import.meta.dir, '../../web/src/components/status.ts'), 'utf8');
   expect(source).toContain('const TOOL_OUTPUT_MAX_LINES = 5;');
   expect(source).toContain('maxLines: TOOL_OUTPUT_MAX_LINES');
+});
+
+function collectInnerHtml(node: FakeNode | null): string[] {
+  if (!node || !(node instanceof FakeElement)) return [];
+  return [node.innerHTML, ...node.childNodes.flatMap((child) => collectInnerHtml(child))].filter(Boolean);
+}
+
+test('AgentStatus shows the tail of live tool output while collapsed', async () => {
+  const fakeDocument = new FakeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = { document: fakeDocument };
+  (globalThis as any).Element = FakeElement;
+  (globalThis as any).NodeFilter = { SHOW_TEXT: 4 };
+  (globalThis as any).DOMParser = class DOMParserStub {
+    parseFromString(text: string) {
+      return {
+        documentElement: { textContent: text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') },
+        body: { innerHTML: text },
+        createTreeWalker: () => ({ nextNode: () => null }),
+      };
+    }
+  };
+
+  const { AgentStatus } = await importFresh<typeof import('../../web/src/components/status.ts')>('../web/src/components/status.ts');
+  const { h, render } = await import('../../web/src/vendor/preact-htm.js');
+
+  const host = fakeDocument.createElement('div');
+  fakeDocument.body.appendChild(host);
+  const output = Array.from({ length: 7 }, (_, index) => `line ${index + 1}`).join('\n');
+
+  render(h(AgentStatus, {
+    status: {
+      type: 'tool_status',
+      title: 'bash',
+      status: 'Streaming output...',
+      output_preview: output,
+      output_total_lines: 7,
+    },
+  }), host);
+
+  const htmlOutput = collectInnerHtml(host).join('\n');
+  expect(htmlOutput).toContain('line 3');
+  expect(htmlOutput).toContain('line 7');
+  expect(htmlOutput).not.toContain('line 1');
+  expect(htmlOutput).not.toContain('line 2');
+
+  render(null, host);
 });
 
 test('AgentStatus can toggle between hidden and visible renders without hook-order failures', async () => {

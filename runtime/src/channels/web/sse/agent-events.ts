@@ -88,7 +88,7 @@ function truncateErrorDetail(msg: string, maxLen = 120): string {
 }
 
 const TOOL_OUTPUT_STATUS_PREVIEW_BYTES = 12 * 1024;
-const TOOL_OUTPUT_STATUS_PREVIEW_LINES = 80;
+const TOOL_OUTPUT_STATUS_PREVIEW_LINES = 100;
 
 function readToolOutputText(result: unknown): string {
   const record = readJsonRecord(result);

@@ -182,14 +182,17 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
         return Math.max(1, Math.ceil(line.length / PREVIEW_MAX_CHARS_PER_LINE));
     };
 
-    const truncateLines = (text, maxLines, totalLinesOverride) => {
+    const truncateLines = (text, maxLines, totalLinesOverride, options = {}) => {
         const value = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
         if (!value) {
             const totalLines = Number.isFinite(totalLinesOverride) ? totalLinesOverride : 0;
             return { text: '', omitted: 0, totalLines, visibleLines: 0 };
         }
         const lines = value.split('\n');
-        const clipped = lines.length > maxLines ? lines.slice(0, maxLines).join('\n') : value;
+        const fromTail = options.direction === 'tail';
+        const clipped = lines.length > maxLines
+            ? (fromTail ? lines.slice(-maxLines) : lines.slice(0, maxLines)).join('\n')
+            : value;
         const totalLines = Number.isFinite(totalLinesOverride) ? totalLinesOverride : lines.reduce((acc, line) => acc + countSoftLines(line), 0);
         const visibleLines = clipped
             ? clipped.split('\n').reduce((acc, line) => acc + countSoftLines(line), 0)
@@ -387,9 +390,11 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
             : rawSourceText;
         const isCollapsible = typeof maxLines === 'number';
         const showClose = isExpanded && isCollapsible;
+        const collapseFromTail = panelKey === 'tool-output';
         const truncated = isCollapsible
-            ? truncateLines(sourceText, maxLines, totalLines)
+            ? truncateLines(sourceText, maxLines, totalLines, { direction: collapseFromTail ? 'tail' : 'head' })
             : { text: sourceText || '', omitted: 0, totalLines: Number.isFinite(totalLines) ? totalLines : 0 };
+        const displayText = collapseFromTail && !isExpanded ? truncated.text : sourceText;
         if (!sourceText && !(Number.isFinite(truncated.totalLines) && truncated.totalLines > 0)) return null;
         const bodyClass = `agent-thinking-body${isCollapsible ? ' agent-thinking-body-collapsible' : ''}`;
         const bodyStyle = isCollapsible ? `--agent-thinking-collapsed-lines: ${maxLines};` : '';
@@ -417,7 +422,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
                 <div
                     class=${bodyClass}
                     style=${bodyStyle}
-                    dangerouslySetInnerHTML=${{ __html: renderThinkingMarkdown(sourceText) }}
+                    dangerouslySetInnerHTML=${{ __html: renderThinkingMarkdown(displayText) }}
                 />
                 ${!isExpanded && truncated.omitted > 0 && html`
                     <button class="agent-thinking-truncation" onClick=${() => toggleExpand(panelKey)}>

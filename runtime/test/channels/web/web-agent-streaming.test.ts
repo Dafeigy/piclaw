@@ -54,7 +54,12 @@ describe("web agent streaming", () => {
           toolCallId: "tool-1",
           toolName: "bash",
           args: { command: "echo hi" },
-          partialResult: { content: [{ type: "text", text: "line 1\nline 2" }] },
+          partialResult: {
+            content: [{
+              type: "text",
+              text: Array.from({ length: 105 }, (_, index) => `line ${index + 1}`).join("\n"),
+            }],
+          },
         }));
         options.onEvent?.(makeEvent("tool_execution_end", {
           toolCallId: "tool-1",
@@ -112,8 +117,10 @@ describe("web agent streaming", () => {
       expect(toolStatus).toBeDefined();
       expect(toolStatus?.data?.tool_name).toBe("bash");
       expect(toolStatus?.data?.tool_args).toEqual({ command: "echo hi" });
-      expect(toolStatus?.data?.output_preview).toBe("line 1\nline 2");
-      expect(toolStatus?.data?.output_total_lines).toBe(2);
+      expect(toolStatus?.data?.output_preview).toBe(Array.from({ length: 100 }, (_, index) => `line ${index + 6}`).join("\n"));
+      expect(toolStatus?.data?.output_total_lines).toBe(105);
+      expect(toolStatus?.data?.output_preview_lines).toBe(100);
+      expect(toolStatus?.data?.output_truncated).toBe(true);
 
       const responses = events.filter((event) => event.type === "agent_response");
       expect(responses.length).toBeGreaterThanOrEqual(2);
