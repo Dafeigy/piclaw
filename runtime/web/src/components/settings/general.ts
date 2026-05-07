@@ -55,6 +55,42 @@ function normalizeGeneralSettings(data: Record<string, any> = {}) {
     };
 }
 
+export async function writeSettingsClipboardText(value, runtime: any = {}) {
+    const text = typeof value === 'string' ? value : '';
+    if (!text) return false;
+
+    const nav = runtime.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
+    const doc = runtime.document ?? (typeof document !== 'undefined' ? document : null);
+
+    if (nav?.clipboard?.writeText) {
+        try {
+            await nav.clipboard.writeText(text);
+            return true;
+        } catch (_error) {
+            // Fall through to execCommand for HTTP/tunneled/non-secure contexts.
+        }
+    }
+
+    try {
+        if (!doc?.body || typeof doc.createElement !== 'function' || typeof doc.execCommand !== 'function') return false;
+        const textarea = doc.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute?.('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        textarea.style.opacity = '0';
+        doc.body.appendChild(textarea);
+        textarea.focus?.();
+        textarea.select?.();
+        const copied = Boolean(doc.execCommand('copy'));
+        doc.body.removeChild(textarea);
+        return copied;
+    } catch (_error) {
+        return false;
+    }
+}
+
 export function GeneralSection({ settingsData, setStatus, mergeSettingsData }) {
     const [userName, setUserName] = useState('');
     const [userAvatar, setUserAvatar] = useState('');
@@ -147,14 +183,15 @@ export function GeneralSection({ settingsData, setStatus, mergeSettingsData }) {
 
     const copyWidgetToken = useCallback(async () => {
         if (!widgetToken) return;
-        try {
-            await navigator.clipboard?.writeText(widgetToken);
+        const copied = await writeSettingsClipboardText(widgetToken);
+        if (copied) {
             setWidgetTokenCopied(true);
             setTimeout(() => { if (mountedRef.current) setWidgetTokenCopied(false); }, 3000);
-        } catch (error) {
-            console.warn('[settings/general] Failed to copy widget token.', error);
+        } else {
+            setStatus?.('Could not copy widget token. Select the token field and copy manually.');
+            console.warn('[settings/general] Failed to copy widget token. Clipboard APIs unavailable or blocked.');
         }
-    }, [widgetToken]);
+    }, [widgetToken, setStatus]);
 
     const regenerateWidgetToken = useCallback(async () => {
         if (widgetTokenBusy) return;
