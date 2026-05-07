@@ -349,6 +349,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
       - name: Download portable artifacts
         uses: actions/download-artifact@v6
         with:
