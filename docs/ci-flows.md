@@ -39,7 +39,7 @@ flowchart TB
     PWAIT["wait-for-integration: Wait for Integration gate workflow run"]
     PRES["resolve-runtime-versions: Checkout + read BUN_VERSION + read RESTIC_VERSION"]
 
-    PPORT["build-portable-artifacts (matrix linux-x64/linux-arm64/macos-arm64/windows-x64): Checkout → Setup Bun → Install deps → Build portable → Upload artifact"]
+    PPORT["build-portable-artifacts (matrix linux-x64/linux-x64-baseline/linux-arm64/macos-arm64/windows-x64): Checkout → Setup Bun → Install deps → Build portable → Upload artifact"]
 
     PDESK["build-experimental-shell-artifacts (same matrix): Checkout → Setup Bun → Install deps → Build desktop artifact → Upload piclaw-desktop artifact"]
 

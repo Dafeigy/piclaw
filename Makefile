@@ -8,6 +8,7 @@
 #   build-desktop  – Build the optional Electrobun desktop shell.
 #   pack           – Pack piclaw into a .tgz (depends on build-piclaw).
 #   portable-linux – Build a Linux self-extracting .run artifact (depends on build-piclaw).
+#   portable-linux-baseline – Build a Linux x64 .run artifact with non-AVX Bun.
 #   portable-mac/windows – Build platform-native portable artifacts on matching runners.
 #   portable-experimental-shell – Build the Electrobun shell artifact with an -experimental suffix.
 #   local-install  – Pack and install globally (no restart).
@@ -43,7 +44,7 @@ GLOBAL_LOCK := $(BUN_ROOT)/install/global/bun.lock
 PI_AGENT_VERSION ?= $(shell jq -r '.dependencies["@earendil-works/pi-coding-agent"] // "0.74.0"' package.json)
 WEB_BUILD_TEST_TIMEOUT_MS ?= 20000
 
-.PHONY: help up down enter build build-piclaw build-web build-ts build-desktop vendor update-mermaid-vendor pack portable portable-linux portable-mac portable-windows portable-experimental-shell \
+.PHONY: help up down enter build build-piclaw build-web build-ts build-desktop vendor update-mermaid-vendor pack portable portable-linux portable-linux-baseline portable-mac portable-windows portable-experimental-shell \
         local-install restart lint test test-coverage ci-fast ci-integration install-git-hooks pre-push-ci publish-smoke \
         dual-tag tag-ghcr sync-version bump-minor bump-patch push
 
@@ -145,6 +146,11 @@ portable: build-piclaw ## Build the platform-native portable artifact for the cu
 portable-linux: build-piclaw ## Build a Linux self-extracting .run artifact for the current architecture
 	@test "$$(uname -s)" = "Linux" || { echo "portable-linux must run on Linux" >&2; exit 1; }
 	bun run release:build-linux-run
+
+portable-linux-baseline: build-piclaw ## Build a Linux x64 .run artifact with non-AVX Bun baseline runtime
+	@test "$$(uname -s)" = "Linux" || { echo "portable-linux-baseline must run on Linux" >&2; exit 1; }
+	@test "$$(uname -m)" = "x86_64" || { echo "portable-linux-baseline must run on x86_64" >&2; exit 1; }
+	bun run release:build-portable --bun-target linux-x64-baseline
 
 portable-mac: build-piclaw ## Build a macOS portable .tar.gz artifact on a macOS runner
 	@test "$$(uname -s)" = "Darwin" || { echo "portable-mac must run on macOS" >&2; exit 1; }

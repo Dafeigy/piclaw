@@ -111,15 +111,23 @@ jobs:
           - platform: linux
             arch: x64
             runner: ubuntu-24.04
+            build_args: ""
+          - platform: linux
+            arch: x64-baseline
+            runner: ubuntu-24.04
+            build_args: "--bun-target linux-x64-baseline"
           - platform: linux
             arch: arm64
             runner: ubuntu-24.04-arm
+            build_args: ""
           - platform: macos
             arch: arm64
             runner: macos-14
+            build_args: ""
           - platform: windows
             arch: x64
             runner: windows-latest
+            build_args: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -133,7 +141,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build portable artifact
-        run: bun run release:build-portable
+        run: bun run release:build-portable ${{ matrix.build_args }}
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4

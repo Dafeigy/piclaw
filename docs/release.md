@@ -10,11 +10,12 @@ Pushing a version tag triggers `.github/workflows/publish.yml` and publishes mul
 The same workflow also builds portable YOLO upgrade artifacts and attaches them to the GitHub release:
 
 - `piclaw-<version>-linux-x64.run`
+- `piclaw-<version>-linux-x64-baseline.run` — non-AVX x64 Linux Bun runtime for older CPUs
 - `piclaw-<version>-linux-arm64.run`
 - `piclaw-<version>-macos-arm64.tar.gz`
 - `piclaw-<version>-windows-x64.zip`
 
-These portable artifacts bundle Bun, Piclaw, built web assets, `skel/`, vendored runtime assets, and production `node_modules` for the target OS/architecture.
+These portable artifacts bundle Bun, Piclaw, built web assets, `skel/`, vendored runtime assets, and production `node_modules` for the target OS/architecture. The `linux-x64-baseline` artifact uses Bun’s non-AVX baseline build.
 
 The workflow also publishes the experimental Electrobun desktop shell for each release runner with a `piclaw-desktop` prefix:
 
@@ -63,6 +64,7 @@ Build a local portable artifact for the current architecture when you need a man
 ```bash
 make portable       # current OS/arch portable runtime artifact
 make portable-linux # Linux-only .run alias
+make portable-linux-baseline # Linux x64 .run with non-AVX Bun baseline runtime
 make portable-mac   # macOS-only .tar.gz alias
 make portable-windows # Windows-only .zip alias
 make portable-experimental-shell # current OS/arch Electrobun shell artifact with piclaw-desktop prefix

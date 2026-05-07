@@ -34,13 +34,15 @@ import { pipeline } from "node:stream/promises";
 interface Options {
   outputDir: string;
   keepWorkdir: boolean;
+  bunTarget: string | null;
 }
 
 interface PlatformInfo {
   platform: "linux" | "macos" | "windows";
-  arch: "x64" | "arm64";
+  arch: "x64" | "arm64" | "x64-baseline";
   bundleName: string;
   artifactPath: string;
+  bunTarget: string | null;
 }
 
 const repoRoot = resolve(import.meta.dir, "..", "..");
@@ -55,6 +57,7 @@ function parseOptions(argv: string[]): Options {
   const options: Options = {
     outputDir: defaultOutputDir,
     keepWorkdir: false,
+    bunTarget: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -72,6 +75,15 @@ function parseOptions(argv: string[]): Options {
       options.keepWorkdir = true;
       continue;
     }
+    if (arg === "--bun-target" && typeof argv[index + 1] === "string") {
+      options.bunTarget = normalizeBundledBunTarget(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--bun-target=")) {
+      options.bunTarget = normalizeBundledBunTarget(arg.slice("--bun-target=".length));
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       printHelpAndExit();
     }
@@ -82,8 +94,19 @@ function parseOptions(argv: string[]): Options {
 }
 
 function printHelpAndExit(): never {
-  console.log(`Usage: bun run scripts/release/build-portable-artifact.ts [options]\n\nOptions:\n  --output-dir DIR   Directory for the generated artifact (default: artifacts/release)\n  --keep-workdir     Keep the temporary build directory for inspection\n  -h, --help         Show this help\n`);
+  console.log(`Usage: bun run scripts/release/build-portable-artifact.ts [options]\n\nOptions:\n  --output-dir DIR       Directory for the generated artifact (default: artifacts/release)\n  --bun-target TARGET    Bundle a specific Bun release target instead of process.execPath\n                         Supported today: linux-x64-baseline (non-AVX x64 Linux)\n  --keep-workdir         Keep the temporary build directory for inspection\n  -h, --help             Show this help\n`);
   process.exit(0);
+}
+
+function normalizeBundledBunTarget(value: string): string {
+  const target = value.trim();
+  if (target !== "linux-x64-baseline") {
+    throw new Error(`Unsupported --bun-target '${value}'. Supported target: linux-x64-baseline`);
+  }
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    throw new Error(`--bun-target ${target} must be built on a linux-x64 runner`);
+  }
+  return target;
 }
 
 function run(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): void {
@@ -105,9 +128,9 @@ function readPackageVersion(): string {
   return pkg.version;
 }
 
-function currentPlatformInfo(outputDir: string, version: string): PlatformInfo {
-  const arch = normalizeArch();
+function currentPlatformInfo(outputDir: string, version: string, bunTarget: string | null): PlatformInfo {
   const platform = normalizePlatform();
+  const arch = bunTarget === "linux-x64-baseline" ? "x64-baseline" : normalizeArch();
   const bundleName = `piclaw-${version}-${platform}-${arch}`;
   const extension = platform === "linux" ? ".run" : platform === "windows" ? ".zip" : ".tar.gz";
   return {
@@ -115,6 +138,7 @@ function currentPlatformInfo(outputDir: string, version: string): PlatformInfo {
     arch,
     bundleName,
     artifactPath: join(outputDir, `${bundleName}${extension}`),
+    bunTarget,
   };
 }
 
@@ -125,7 +149,7 @@ function normalizePlatform(): PlatformInfo["platform"] {
   throw new Error(`Unsupported platform for portable artifacts: ${process.platform}`);
 }
 
-function normalizeArch(): PlatformInfo["arch"] {
+function normalizeArch(): Extract<PlatformInfo["arch"], "x64" | "arm64"> {
   if (process.arch === "x64") return "x64";
   if (process.arch === "arm64") return "arm64";
   throw new Error(`Unsupported architecture for portable artifacts: ${process.arch}`);
@@ -297,9 +321,59 @@ async function writeStubAndPayload(targetPath: string, stub: string, payloadPath
   await pipeline(createReadStream(payloadPath), stream, { end: true });
 }
 
-function copyBundledBun(bundleDir: string, platform: PlatformInfo["platform"]): void {
-  const bunSource = process.execPath;
-  if (platform === "windows") {
+function readPinnedBunVersion(): string {
+  const raw = readFileSync(join(repoRoot, "BUN_VERSION"), "utf8").trim();
+  const version = raw.replace(/^bun-v/, "").replace(/^v/, "");
+  if (!version) throw new Error("BUN_VERSION file is empty");
+  return version;
+}
+
+function sha256File(path: string): string {
+  const result = spawnSync("sha256sum", [path], { encoding: "utf8", shell: false });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`sha256sum failed for ${path}: ${result.stderr}`);
+  return result.stdout.trim().split(/\s+/)[0] || "";
+}
+
+function downloadBunReleaseBinary(bunTarget: string, workdir: string): string {
+  const bunVersion = readPinnedBunVersion();
+  const downloadDir = join(workdir, "bun-release-download");
+  const extractDir = join(downloadDir, "extract");
+  mkdirSync(extractDir, { recursive: true });
+
+  const filename = `bun-${bunTarget}.zip`;
+  const baseUrl = `https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}`;
+  const archivePath = join(downloadDir, filename);
+  const checksumsPath = join(downloadDir, "SHASUMS256.txt");
+
+  run("curl", ["-fsSL", "--fail", `${baseUrl}/${filename}`, "-o", archivePath]);
+  run("curl", ["-fsSL", "--fail", `${baseUrl}/SHASUMS256.txt`, "-o", checksumsPath]);
+
+  const checksumLine = readFileSync(checksumsPath, "utf8")
+    .split(/\r?\n/)
+    .find((line) => line.trim().split(/\s+/)[1] === filename);
+  const expectedChecksum = checksumLine?.trim().split(/\s+/)[0] || "";
+  if (!expectedChecksum) throw new Error(`Missing checksum entry for ${filename}`);
+
+  const actualChecksum = sha256File(archivePath);
+  if (actualChecksum !== expectedChecksum) {
+    throw new Error(`Checksum mismatch for ${filename}\nExpected: ${expectedChecksum}\nActual:   ${actualChecksum}`);
+  }
+
+  run("unzip", ["-q", archivePath, "-d", extractDir]);
+  const executable = process.platform === "win32" ? "bun.exe" : "bun";
+  const candidates = [
+    join(extractDir, `bun-${bunTarget}`, executable),
+    join(extractDir, bunTarget, executable),
+  ];
+  const binary = candidates.find((candidate) => existsSync(candidate));
+  if (!binary) throw new Error(`Unexpected Bun archive layout for ${bunTarget}`);
+  return binary;
+}
+
+function copyBundledBun(bundleDir: string, info: PlatformInfo, workdir: string): void {
+  const bunSource = info.bunTarget ? downloadBunReleaseBinary(info.bunTarget, workdir) : process.execPath;
+  if (info.platform === "windows") {
     const bunTargetDir = join(bundleDir, "bun");
     mkdirSync(bunTargetDir, { recursive: true });
     copyFileSync(bunSource, join(bunTargetDir, "bun.exe"));
@@ -344,7 +418,7 @@ function packagePortableArtifact(workdir: string, info: PlatformInfo): void {
 
 async function buildPortableArtifact(options: Options): Promise<void> {
   const version = readPackageVersion();
-  const info = currentPlatformInfo(options.outputDir, version);
+  const info = currentPlatformInfo(options.outputDir, version, options.bunTarget);
   const workdir = mkdtempSync(join(tmpdir(), "piclaw-portable-"));
   const packDir = join(workdir, "pack");
   const extractDir = join(workdir, "extract");
@@ -381,7 +455,7 @@ async function buildPortableArtifact(options: Options): Promise<void> {
       },
     });
 
-    copyBundledBun(bundleDir, info.platform);
+    copyBundledBun(bundleDir, info, workdir);
     renameSync(appDir, join(bundleDir, "app"));
     writeLaunchers(bundleDir, info.platform, info.bundleName);
 
@@ -391,7 +465,8 @@ async function buildPortableArtifact(options: Options): Promise<void> {
       version,
       platform: info.platform,
       arch: info.arch,
-      bun: basename(process.execPath),
+      bun: info.bunTarget ?? basename(process.execPath),
+      bunTarget: info.bunTarget,
       builtAt: new Date().toISOString(),
     }, null, 2) + "\n");
 
