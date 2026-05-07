@@ -603,6 +603,13 @@ function resolveCurrentChatJid() {
     }
 }
 
+function syncDocumentBackground(color) {
+    if (typeof document === 'undefined' || !color) return;
+    const root = document.documentElement;
+    if (root?.style) root.style.background = color;
+    if (document.body?.style) document.body.style.background = color;
+}
+
 function applyThemeState(nextTheme, options: { persist?: boolean } = {}) {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
     const themeName = normalizeThemeName(nextTheme?.theme || 'default');
@@ -631,6 +638,7 @@ function applyThemeState(nextTheme, options: { persist?: boolean } = {}) {
         applyCssVariables(palette, mode);
     }
 
+    syncDocumentBackground(palette.bgPrimary);
     updateMetaColor(palette.bgPrimary, mode);
     emitThemeChange();
 

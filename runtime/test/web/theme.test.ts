@@ -136,6 +136,29 @@ test('/tint updates derived highlight vars and tints the full default palette', 
 });
 
 
+test('theme application updates inline document backgrounds used by standalone webapp safe areas', async () => {
+  const runtime = createThemeRuntime();
+  (globalThis as any).window = runtime.window;
+  (globalThis as any).document = runtime.document;
+  (globalThis as any).CustomEvent = class CustomEventStub {
+    type: string;
+    detail: unknown;
+    constructor(type: string, init?: { detail?: unknown }) {
+      this.type = type;
+      this.detail = init?.detail;
+    }
+  };
+
+  runtime.document.documentElement.style.background = '#ffffff';
+  runtime.document.body.style.background = '#ffffff';
+
+  const theme = await importFresh<typeof import('../../web/src/ui/theme.js')>('../web/src/ui/theme.ts');
+  theme.applyThemeFromEvent({ theme: 'dracula' });
+
+  expect(runtime.document.documentElement.style.background).toBe('#282a36');
+  expect(runtime.document.body.style.background).toBe('#282a36');
+});
+
 test('named themes still expose a distinct warning token instead of falling back to accent', async () => {
   const runtime = createThemeRuntime();
   (globalThis as any).window = runtime.window;
