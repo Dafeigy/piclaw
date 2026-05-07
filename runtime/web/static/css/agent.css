@@ -276,6 +276,7 @@
     animation: fadeIn 0.2s ease-out;
     --turn-color: var(--accent-color);
     --pane-bottom-border: color-mix(in srgb, var(--border-color) 85%, transparent);
+    --agent-tool-mono-font-size: 0.8em;
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
@@ -313,7 +314,7 @@
 .agent-tool-argument,
 .agent-tool-command-line {
     font-family: var(--font-mono, monospace);
-    font-size: 0.95em;
+    font-size: var(--agent-tool-mono-font-size, 0.8em);
     overflow-wrap: anywhere;
 }
 
@@ -455,10 +456,14 @@
     max-height: min(34vh, 22rem);
 }
 
-.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body,
-.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body * {
+.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body {
     font-family: var(--font-mono, monospace);
-    font-size: 11px;
+    font-size: var(--agent-tool-mono-font-size, 0.8em);
+}
+
+.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body * {
+    font-family: inherit;
+    font-size: inherit;
 }
 
 .agent-thinking-body,

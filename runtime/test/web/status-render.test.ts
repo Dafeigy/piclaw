@@ -149,8 +149,9 @@ test('expanded thought, draft, and live tool-output panels keep constrained scro
   expect(css).toContain('max-height: min(52vh, 34rem);');
   expect(css).toContain('max-height: min(34vh, 22rem);');
   expect(css).toContain('.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body');
+  expect(css).toContain('--agent-tool-mono-font-size: 0.8em;');
   expect(css).toContain('font-family: var(--font-mono, monospace);');
-  expect(css).toContain('font-size: 11px;');
+  expect(css).toContain('font-size: var(--agent-tool-mono-font-size, 0.8em);');
 });
 
 test('tool output panel keeps a tighter 5-line collapsed preview cap', () => {
@@ -208,6 +209,7 @@ test('AgentStatus renders bash tool command lines as generic monospace tool argu
   const css = readFileSync(join(import.meta.dir, '../../web/static/css/agent.css'), 'utf8');
   expect(css).toContain('.agent-tool-argument');
   expect(css).toContain('font-family: var(--font-mono, monospace);');
+  expect(css).toContain('font-size: var(--agent-tool-mono-font-size, 0.8em);');
 
   const fakeDocument = new FakeDocument();
   installStatusDomStubs(fakeDocument);
