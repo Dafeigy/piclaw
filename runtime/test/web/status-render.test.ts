@@ -149,9 +149,11 @@ test('expanded thought, draft, and live tool-output panels keep constrained scro
   expect(css).toContain('max-height: min(52vh, 34rem);');
   expect(css).toContain('max-height: min(34vh, 22rem);');
   expect(css).toContain('.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body');
-  expect(css).toContain('--agent-tool-mono-font-size: 0.8em;');
+  expect(css).toContain('--agent-intent-tool-argument-font-size: 0.9em;');
+  expect(css).toContain('--agent-tool-output-font-size: 0.8em;');
+  expect(css).toContain('min-height: calc((var(--agent-thinking-line-height) * 1em * 5) + 0.4em);');
   expect(css).toContain('font-family: var(--font-mono, monospace);');
-  expect(css).toContain('font-size: var(--agent-tool-mono-font-size, 0.8em);');
+  expect(css).toContain('font-size: var(--agent-tool-output-font-size, 0.8em);');
 });
 
 test('tool output panel keeps a tighter 5-line collapsed preview cap', () => {
@@ -209,7 +211,8 @@ test('AgentStatus renders bash tool command lines as generic monospace tool argu
   const css = readFileSync(join(import.meta.dir, '../../web/static/css/agent.css'), 'utf8');
   expect(css).toContain('.agent-tool-argument');
   expect(css).toContain('font-family: var(--font-mono, monospace);');
-  expect(css).toContain('font-size: var(--agent-tool-mono-font-size, 0.8em);');
+  expect(css).toContain('.agent-thinking-intent .agent-tool-argument');
+  expect(css).toContain('font-size: var(--agent-intent-tool-argument-font-size, 0.9em);');
 
   const fakeDocument = new FakeDocument();
   installStatusDomStubs(fakeDocument);
@@ -336,6 +339,42 @@ test('AgentStatus labels tool output as Output and shows the tail while collapse
   expect(htmlOutput).toContain('line 7');
   expect(htmlOutput).not.toContain('line 1');
   expect(htmlOutput).not.toContain('line 2');
+
+  render(null, host);
+});
+
+test('AgentStatus reserves tool-output collapsed height and hint space for short output', async () => {
+  const fakeDocument = new FakeDocument();
+  installStatusDomStubs(fakeDocument);
+
+  const { AgentStatus } = await importFresh<typeof import('../../web/src/components/status.ts')>('../web/src/components/status.ts');
+  const { h, render } = await import('../../web/src/vendor/preact-htm.js');
+
+  const host = fakeDocument.createElement('div');
+  fakeDocument.body.appendChild(host);
+
+  render(h(AgentStatus, {
+    status: {
+      type: 'tool_status',
+      title: 'bash',
+      status: 'Streaming output...',
+      output_preview: 'line 1\nline 2',
+      output_total_lines: 2,
+    },
+  }), host);
+
+  const toolPanel = findElements(host, (node) => getAttr(node, 'data-panel-key') === 'tool-output')[0];
+  expect(toolPanel).toBeDefined();
+  const directElementChildren = toolPanel.childNodes.filter((child): child is FakeElement => child instanceof FakeElement);
+  const placeholder = directElementChildren.find((node) => getAttr(node, 'class').includes('agent-thinking-truncation-placeholder'));
+  const bodyIndex = directElementChildren.findIndex((node) => getAttr(node, 'class').includes('agent-thinking-body'));
+  const placeholderIndex = directElementChildren.findIndex((node) => node === placeholder);
+
+  expect(placeholder).toBeDefined();
+  expect(getAttr(placeholder!, 'aria-hidden')).toBe('true');
+  expect(placeholderIndex).toBeGreaterThan(-1);
+  expect(bodyIndex).toBeGreaterThan(-1);
+  expect(placeholderIndex).toBeLessThan(bodyIndex);
 
   render(null, host);
 });

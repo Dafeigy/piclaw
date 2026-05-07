@@ -276,7 +276,8 @@
     animation: fadeIn 0.2s ease-out;
     --turn-color: var(--accent-color);
     --pane-bottom-border: color-mix(in srgb, var(--border-color) 85%, transparent);
-    --agent-tool-mono-font-size: 0.8em;
+    --agent-intent-tool-argument-font-size: 0.9em;
+    --agent-tool-output-font-size: 0.8em;
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
@@ -314,8 +315,12 @@
 .agent-tool-argument,
 .agent-tool-command-line {
     font-family: var(--font-mono, monospace);
-    font-size: var(--agent-tool-mono-font-size, 0.8em);
     overflow-wrap: anywhere;
+}
+
+.agent-thinking-intent .agent-tool-argument,
+.agent-thinking-intent .agent-tool-command-line {
+    font-size: var(--agent-intent-tool-argument-font-size, 0.9em);
 }
 
 .agent-thinking-title-text .agent-tool-argument,
@@ -454,11 +459,12 @@
 
 .agent-thinking[data-panel-key="tool-output"] .agent-thinking-body-collapsible {
     max-height: min(34vh, 22rem);
+    min-height: calc((var(--agent-thinking-line-height) * 1em * 5) + 0.4em);
 }
 
 .agent-thinking[data-panel-key="tool-output"] .agent-thinking-body {
     font-family: var(--font-mono, monospace);
-    font-size: var(--agent-tool-mono-font-size, 0.8em);
+    font-size: var(--agent-tool-output-font-size, 0.8em);
 }
 
 .agent-thinking[data-panel-key="tool-output"] .agent-thinking-body * {
@@ -493,6 +499,11 @@
 
 .agent-thinking-truncation:hover {
     color: var(--text-secondary);
+}
+
+.agent-thinking-truncation-placeholder {
+    visibility: hidden;
+    pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

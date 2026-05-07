@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   SLASH_COMMANDS,
@@ -209,6 +211,17 @@ test('parseQueuedContent normalizes backtick-wrapped file refs from Files blocks
     'piclaw/runtime/extensions/viewers/editor/markdown/code-block.ts',
     'piclaw/runtime/web/static/dist/editor.bundle.js',
   ]);
+});
+
+test('QueuedFollowupStack renders move-down before move-up controls', () => {
+  const source = readFileSync(join(import.meta.dir, '../../web/src/components/compose-box.ts'), 'utf8');
+  const controlsStart = source.indexOf('aria-label="Queued follow-up controls"');
+  expect(controlsStart).toBeGreaterThan(-1);
+  const moveDownIndex = source.indexOf('data-action="move-down"', controlsStart);
+  const moveUpIndex = source.indexOf('data-action="move-up"', controlsStart);
+  expect(moveDownIndex).toBeGreaterThan(-1);
+  expect(moveUpIndex).toBeGreaterThan(-1);
+  expect(moveDownIndex).toBeLessThan(moveUpIndex);
 });
 
 test('buildReturnedQueuedDraft restores refs and preserves attachment markers in compose text', () => {
