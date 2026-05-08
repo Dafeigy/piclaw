@@ -1,11 +1,11 @@
 import { expect, mock, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
+import { ComposeBox, QueuedFollowupStack } from '../../web/src/components/compose-box.js';
 import {
   buildMainShellClassName,
   extractPostedUserMessageId,
   handleComposePost,
+  renderMainShell,
   scrollToPostedTimelineMessage,
 } from '../../web/src/ui/app-main-shell-render.js';
 
@@ -61,13 +61,211 @@ test('handleComposePost falls back to scrolling to the bottom when there is no p
   expect(scrollPostedMessage).not.toHaveBeenCalled();
 });
 
-test('renderMainShell keeps queued edit controls inside ComposeBox', () => {
-  const source = readFileSync(join(import.meta.dir, '../../web/src/ui/app-main-shell-render.ts'), 'utf8');
+function walkVNodes(node: any, visit: (entry: any) => void) {
+  if (!node) return;
+  if (Array.isArray(node)) {
+    for (const child of node) walkVNodes(child, visit);
+    return;
+  }
+  if (typeof node !== 'object') return;
+  if (!('type' in node) || !('props' in node)) return;
 
-  expect(source).not.toContain('QueuedFollowupStack');
-  expect(source).not.toContain('showQueueStack=${false}');
-  expect(source).toContain('followupQueueItems=${followupQueueItems}');
-  expect(source).toContain('onRemoveQueuedFollowup=${handleRemoveQueuedFollowup}');
+  visit(node);
+  walkVNodes((node as any).props?.children, visit);
+}
+
+function createMainShellRenderOptions(overrides: Record<string, unknown> = {}) {
+  const noop = () => {};
+  return {
+    appShellRef: { current: null },
+    workspaceOpen: false,
+    editorOpen: false,
+    chatOnlyMode: true,
+    zenMode: false,
+    isRenameBranchFormOpen: false,
+    closeRenameCurrentBranchForm: noop,
+    handleRenameCurrentBranch: noop,
+    renameBranchNameDraft: '',
+    renameBranchNameInputRef: { current: null },
+    setRenameBranchNameDraft: noop,
+    renameBranchDraftState: { kind: 'info', message: '', canSubmit: false },
+    isRenamingBranch: false,
+    addFileRef: noop,
+    addFolderRef: noop,
+    openEditor: noop,
+    openTerminalTab: noop,
+    openVncTab: noop,
+    hasDockPanes: false,
+    toggleDock: noop,
+    dockVisible: false,
+    handleSplitterMouseDown: noop,
+    handleSplitterTouchStart: noop,
+    showEditorPaneContainer: false,
+    tabStripTabs: [],
+    tabStripActiveId: null,
+    handleTabActivate: noop,
+    handleTabClose: noop,
+    handleTabCloseOthers: noop,
+    handleTabCloseAll: noop,
+    handleTabTogglePin: noop,
+    handleTabTogglePreview: noop,
+    handleTabToggleDiff: noop,
+    handleTabEditSource: noop,
+    handleReattachPane: noop,
+    previewTabs: new Set(),
+    diffTabs: new Set(),
+    tabPaneOverrides: new Map(),
+    toggleZenMode: noop,
+    handlePopOutPane: noop,
+    isWebAppMode: false,
+    editorContainerRef: { current: null },
+    editorInstanceRef: { current: null },
+    detachedTabs: [],
+    activeDetachedTab: null,
+    detachedDockPane: null,
+    handleDockSplitterMouseDown: noop,
+    handleDockSplitterTouchStart: noop,
+    TERMINAL_TAB_PATH: 'terminal',
+    dockContainerRef: { current: null },
+    handleEditorSplitterMouseDown: noop,
+    handleEditorSplitterTouchStart: noop,
+    searchQuery: null,
+    isIOSDevice: () => false,
+    currentBranchRecord: null,
+    currentChatJid: 'web:default',
+    currentChatBranches: [],
+    handleBranchPickerChange: noop,
+    formatBranchPickerLabel: () => '',
+    openRenameCurrentBranchForm: noop,
+    handlePruneCurrentBranch: noop,
+    handlePurgeArchivedBranch: noop,
+    currentHashtag: null,
+    handleBackToTimeline: noop,
+    activeSearchScopeLabel: 'Current chat',
+    oobePanelState: null,
+    composePrefillRequest: null,
+    requestComposePrefill: noop,
+    handleOobeSetupProvider: noop,
+    handleOobeShowModelPicker: noop,
+    handleOobeOpenWorkspace: noop,
+    handleDismissProviderMissingOobe: noop,
+    handleCompleteProviderReadyOobe: noop,
+    posts: [],
+    isMainTimelineView: true,
+    hasMore: false,
+    loadMore: noop,
+    timelineRef: { current: null },
+    handleHashtagClick: noop,
+    addMessageRef: noop,
+    scrollToMessage: noop,
+    openFileFromPill: noop,
+    openTimelineFileFromPill: noop,
+    handleDeletePost: noop,
+    handleOpenFloatingWidget: noop,
+    agents: [],
+    userProfile: null,
+    removingPostIds: new Set(),
+    agentStatus: null,
+    isCompactionStatus: () => false,
+    agentDraft: null,
+    agentPlan: null,
+    agentThought: null,
+    pendingRequest: null,
+    intentToast: null,
+    currentTurnId: null,
+    steerQueued: null,
+    handlePanelToggle: noop,
+    btwSession: null,
+    closeBtwPanel: noop,
+    handleBtwRetry: noop,
+    handleBtwInject: noop,
+    floatingWidget: null,
+    handleCloseFloatingWidget: noop,
+    handleFloatingWidgetEvent: noop,
+    attachmentPreview: null,
+    setAttachmentPreview: noop,
+    extensionStatusPanels: new Map(),
+    pendingExtensionPanelActions: new Set(),
+    handleExtensionPanelAction: noop,
+    searchOpen: false,
+    followupQueueItems: [],
+    handleInjectQueuedFollowup: noop,
+    handleRemoveQueuedFollowup: noop,
+    handleMoveQueuedFollowup: noop,
+    viewStateRef: { current: null },
+    loadPosts: noop,
+    scrollToBottom: noop,
+    searchScope: 'current',
+    handleSearch: noop,
+    handleSearchScopeChange: noop,
+    setSearchScope: noop,
+    enterSearchMode: noop,
+    exitSearchMode: noop,
+    fileRefs: [],
+    removeFileRef: noop,
+    clearFileRefs: noop,
+    setFileRefsFromCompose: noop,
+    folderRefs: [],
+    removeFolderRef: noop,
+    clearFolderRefs: noop,
+    setFolderRefsFromCompose: noop,
+    messageRefs: [],
+    removeMessageRef: noop,
+    clearMessageRefs: noop,
+    setMessageRefsFromCompose: noop,
+    handleCreateSessionFromCompose: noop,
+    handleCreateRootSessionFromCompose: noop,
+    handleRestoreBranch: noop,
+    attachActiveEditorFile: noop,
+    followupQueueCount: 0,
+    handleBtwIntercept: noop,
+    handleMessageResponse: noop,
+    handleComposeSubmitError: noop,
+    isComposeBoxAgentActive: false,
+    activeChatAgents: [],
+    connectionStatus: 'connected',
+    stateAccessFailed: false,
+    activeModel: null,
+    agentModelsPayload: null,
+    activeModelUsage: null,
+    activeThinkingLevel: null,
+    supportsThinking: false,
+    contextUsage: null,
+    extensionWorkingState: null,
+    notificationsEnabled: false,
+    notificationPermission: 'default',
+    handleToggleNotifications: noop,
+    setActiveModel: noop,
+    applyModelState: noop,
+    setPendingRequest: noop,
+    pendingRequestRef: { current: null },
+    toggleWorkspace: noop,
+    ...overrides,
+  };
+}
+
+test('renderMainShell passes queue controls to ComposeBox and does not render a top-level queue stack', () => {
+  const followupQueueItems = [{ row_id: 7, content: 'queued item' }];
+  const handleRemoveQueuedFollowup = mock(() => {});
+
+  const tree = renderMainShell(createMainShellRenderOptions({
+    followupQueueItems,
+    handleRemoveQueuedFollowup,
+  }));
+
+  let composeVNode: any = null;
+  let topLevelQueueStackCount = 0;
+
+  walkVNodes(tree, (node) => {
+    if (node.type === ComposeBox) composeVNode = node;
+    if (node.type === QueuedFollowupStack) topLevelQueueStackCount += 1;
+  });
+
+  expect(composeVNode).toBeTruthy();
+  expect(composeVNode.props.followupQueueItems).toBe(followupQueueItems);
+  expect(composeVNode.props.onRemoveQueuedFollowup).toBe(handleRemoveQueuedFollowup);
+  expect(composeVNode.props.showQueueStack).toBeUndefined();
+  expect(topLevelQueueStackCount).toBe(0);
 });
 
 test('handleComposePost does nothing while search is active', () => {
