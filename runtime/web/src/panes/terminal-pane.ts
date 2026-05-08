@@ -549,22 +549,12 @@ class TerminalPaneInstance implements PaneInstance {
         host.style.minHeight = '0';
         host.style.overflow = 'hidden';
 
-        const primaryChild = host.firstElementChild;
-        if (primaryChild instanceof HTMLElement) {
-            primaryChild.style.width = '100%';
-            primaryChild.style.height = '100%';
-            primaryChild.style.maxWidth = '100%';
-            primaryChild.style.minWidth = '0';
-            primaryChild.style.minHeight = '0';
-            primaryChild.style.flex = '1 1 auto';
-            primaryChild.style.display = 'block';
-        }
-
+        // Do NOT set width/height/flex on the canvas — ghostty manages its own
+        // pixel-accurate canvas sizing via terminal.resize(). Overriding with
+        // CSS percentage values creates a resize feedback loop that freezes the UI.
         const canvas = host.querySelector('canvas');
         if (canvas instanceof HTMLElement) {
             canvas.style.display = 'block';
-            canvas.style.maxWidth = 'none';
-            canvas.style.maxHeight = 'none';
         }
     }
 
@@ -695,6 +685,7 @@ class TerminalPaneInstance implements PaneInstance {
 
             if (isTerminalClipboardPasteShortcut(event)) {
                 if (typeof this.ownerWindow?.navigator?.clipboard?.readText !== 'function') {
+                    // Clipboard API unavailable — fall through to ghostty default handling.
                     return undefined as unknown as boolean;
                 }
                 void readClipboardTextBestEffort(this.ownerWindow?.navigator).then((text) => {
@@ -704,6 +695,9 @@ class TerminalPaneInstance implements PaneInstance {
                 return true;
             }
 
+            // Fall through to ghostty's default key processing.
+            // ghostty contract: true = handled (preventDefault), false = skip processing,
+            // undefined/other = continue with default terminal handling.
             return undefined as unknown as boolean;
         });
     }

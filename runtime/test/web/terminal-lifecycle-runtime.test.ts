@@ -75,7 +75,7 @@ test("resizeTerminalRuntimeBestEffort tolerates renderer and fit races", () => {
     fitAddon: { fit: () => calls.push('fit') },
     sendResize: () => calls.push('sendResize'),
   });
-  expect(calls).toEqual(['sync', 'remeasure', 'fit', 'refresh', 'sync', 'sendResize']);
+  expect(calls).toEqual(['sync', 'remeasure', 'fit', 'sendResize']);
 
   expect(() => resizeTerminalRuntimeBestEffort({
     syncHostLayout: () => {},
