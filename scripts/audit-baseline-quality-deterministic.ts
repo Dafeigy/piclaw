@@ -218,6 +218,7 @@ const groupDefinitions: GroupDefinition[] = [
         "web-sse-client.test.ts",
         "tool-status-hints.test.ts",
         "agent-command-status-title.test.ts",
+        "session-recordings-handler.test.ts",
       ]),
   },
   {
@@ -370,6 +371,12 @@ const groupDefinitions: GroupDefinition[] = [
     match: (relativePath) => relativePath.startsWith("features/"),
   },
   {
+    id: "session-recordings",
+    label: "session recordings",
+    notes: "Session trace recording core, redaction, lifecycle, and replay coverage.",
+    match: (relativePath) => relativePath.startsWith("session-recordings/"),
+  },
+  {
     id: "web-ui-interaction-and-state",
     label: "web ui interaction and state",
     notes: "Compose, queue state, session switching, tabs, app resume, routing, and interaction-heavy UI flows.",
@@ -383,6 +390,7 @@ const groupDefinitions: GroupDefinition[] = [
           "btw.test.ts",
           "compose-model-refresh.test.ts",
           "chat-window.test.ts",
+          "chat-surface-width.test.ts",
           "chat-swipe-navigation.test.ts",
           "compose-box.test.ts",
           "compose-layout.test.ts",
@@ -439,6 +447,7 @@ const groupDefinitions: GroupDefinition[] = [
           "adaptive-card-submission.test.ts",
           "attachment-preview.test.ts",
           "body-portal.test.ts",
+          "disclosure-triangle.test.ts",
           "csv-viewer-pane.test.ts",
           "editor-extension.test.ts",
           "editor-popout-transfer.test.ts",

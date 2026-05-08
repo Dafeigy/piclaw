@@ -60,34 +60,35 @@ async function execute(
     ctx,
     params.refresh ? "Workspace search: refreshing index and searching…" : "Workspace search: searching index…",
   );
-  let rows: WorkspaceSearchRow[] = [];
-  let limit = params.limit ?? 0;
-  let offset = params.offset ?? 0;
-  let error: string | undefined;
-  try {
-    ({ rows, limit, offset, error } = await searchWorkspace({
-      query: params.query,
-      scope: params.scope,
-      limit: params.limit,
-      offset: params.offset,
-      refresh: params.refresh ?? false,
-      max_kb: params.max_kb,
-    }));
-  } finally {
-    finishWorkspaceSearchProgress(ctx);
+  const result = await (async () => {
+    try {
+      return await searchWorkspace({
+        query: params.query,
+        scope: params.scope,
+        limit: params.limit,
+        offset: params.offset,
+        refresh: params.refresh ?? false,
+        max_kb: params.max_kb,
+      });
+    } finally {
+      finishWorkspaceSearchProgress(ctx);
+    }
+  })();
+
+  if (result.error) {
+    return { content: [{ type: "text", text: result.error }], details: { count: 0, results: [] } };
   }
 
-  if (error) {
-    return { content: [{ type: "text", text: error }], details: { count: 0, results: [] } };
-  }
-
-  if (!rows.length) {
+  if (!result.rows.length) {
     return { content: [{ type: "text", text: "No matching workspace files found." }], details: { count: 0, results: [] } };
   }
 
-  const header = `Found ${rows.length} file${rows.length === 1 ? "" : "s"} (limit ${limit}, offset ${offset}).`;
-  const lines = rows.map((row) => `• ${row.path} — ${row.snippet}`);
-  return { content: [{ type: "text", text: `${header}\n${lines.join("\n")}` }], details: { count: rows.length, results: rows } };
+  const header = `Found ${result.rows.length} file${result.rows.length === 1 ? "" : "s"} (limit ${result.limit}, offset ${result.offset}).`;
+  const lines = result.rows.map((row) => `• ${row.path} — ${row.snippet}`);
+  return {
+    content: [{ type: "text", text: `${header}\n${lines.join("\n")}` }],
+    details: { count: result.rows.length, results: result.rows },
+  };
 }
 
 const WORKSPACE_SEARCH_HINT = [
