@@ -213,15 +213,15 @@ test('parseQueuedContent normalizes backtick-wrapped file refs from Files blocks
   ]);
 });
 
-test('QueuedFollowupStack renders move-down before move-up controls', () => {
+test('QueuedFollowupStack renders move-up before move-down controls', () => {
   const source = readFileSync(join(import.meta.dir, '../../web/src/components/compose-box.ts'), 'utf8');
   const controlsStart = source.indexOf('aria-label="Queued follow-up controls"');
   expect(controlsStart).toBeGreaterThan(-1);
-  const moveDownIndex = source.indexOf('data-action="move-down"', controlsStart);
   const moveUpIndex = source.indexOf('data-action="move-up"', controlsStart);
-  expect(moveDownIndex).toBeGreaterThan(-1);
+  const moveDownIndex = source.indexOf('data-action="move-down"', controlsStart);
   expect(moveUpIndex).toBeGreaterThan(-1);
-  expect(moveDownIndex).toBeLessThan(moveUpIndex);
+  expect(moveDownIndex).toBeGreaterThan(-1);
+  expect(moveUpIndex).toBeLessThan(moveDownIndex);
 });
 
 test('buildReturnedQueuedDraft restores refs and preserves attachment markers in compose text', () => {

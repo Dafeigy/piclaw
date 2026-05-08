@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   buildMainShellClassName,
@@ -57,6 +59,15 @@ test('handleComposePost falls back to scrolling to the bottom when there is no p
 
   expect(scrollToBottom).toHaveBeenCalledTimes(1);
   expect(scrollPostedMessage).not.toHaveBeenCalled();
+});
+
+test('renderMainShell keeps queued edit controls inside ComposeBox', () => {
+  const source = readFileSync(join(import.meta.dir, '../../web/src/ui/app-main-shell-render.ts'), 'utf8');
+
+  expect(source).not.toContain('QueuedFollowupStack');
+  expect(source).not.toContain('showQueueStack=${false}');
+  expect(source).toContain('followupQueueItems=${followupQueueItems}');
+  expect(source).toContain('onRemoveQueuedFollowup=${handleRemoveQueuedFollowup}');
 });
 
 test('handleComposePost does nothing while search is active', () => {
