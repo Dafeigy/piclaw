@@ -51,14 +51,14 @@ export function handleExportTimeline(req: Request, ctx: ExportTimelineContext): 
   const config = loadConfig();
   const agentName = config?.assistant?.assistantName || "Assistant";
   const userName = config?.user?.userName || "You";
-  const agentAvatar = config?.assistant?.assistantAvatar ? "/avatar/agent" : null;
-  const userAvatar = config?.user?.userAvatar ? "/avatar/user" : null;
+  const agentAvatarSource = String(config?.assistant?.assistantAvatar || "").trim() || null;
+  const userAvatarSource = String(config?.user?.userAvatar || "").trim() || null;
   const userAvatarBg = String(config?.user?.userAvatarBackground || "").trim().toLowerCase();
 
-  // Inline avatars as data URIs so wkhtmltopdf can render them without
-  // needing to fetch from localhost (which may require auth headers).
-  const agentAvatarDataUri = agentAvatar ? resolveAvatarDataUri(url.origin, agentAvatar, internalSecret) : null;
-  const userAvatarDataUri = userAvatar ? resolveAvatarDataUri(url.origin, userAvatar, internalSecret) : null;
+  // Inline avatars as base64 data URIs so wkhtmltopdf renders them
+  // without needing to call back into the same server (deadlock).
+  const agentAvatar = agentAvatarSource ? resolveAvatarDataUri(agentAvatarSource) : null;
+  const userAvatar = userAvatarSource ? resolveAvatarDataUri(userAvatarSource) : null;
 
   // Build a lookup of referenced message previews for pill rendering.
   const referencedRowIds = extractReferencedRowIds(messages);
@@ -72,8 +72,8 @@ export function handleExportTimeline(req: Request, ctx: ExportTimelineContext): 
     messages,
     agentName,
     userName,
-    agentAvatar: agentAvatarDataUri || agentAvatar,
-    userAvatar: userAvatarDataUri || userAvatar,
+    agentAvatar: agentAvatar,
+    userAvatar: userAvatar,
     userAvatarBg,
     referencedPreviews,
   });
@@ -233,10 +233,11 @@ function sanitizeMarkdownHtml(html: string): string {
 }
 
 function renderMarkdown(content: string): string {
+  // Escape < and & to prevent raw HTML injection, but preserve >
+  // so markdown blockquote syntax (> text) works correctly.
   const safe = (content || "")
     .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/</g, "&lt;");
   return sanitizeMarkdownHtml(String(marked.parse(safe, { async: false, gfm: true, breaks: true })));
 }
 
@@ -259,16 +260,23 @@ function formatSize(bytes: number | null | undefined): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Fetch an avatar URL from localhost and return a data URI, or null on failure. */
-function resolveAvatarDataUri(origin: string, avatarPath: string, authKey: string): string | null {
+/** Read an avatar from a local file path or remote URL and return a data URI. */
+function resolveAvatarDataUri(source: string): string | null {
   try {
-    const url = avatarPath.startsWith("http") ? avatarPath : `${origin}${avatarPath}`;
-    const res = Bun.spawnSync(
-      ["curl", "-sf", "--max-time", "5", "-H", `Authorization: Bearer ${authKey}`, url],
-      { stdout: "pipe" },
-    );
-    if (!res.stdout || res.stdout.length === 0) return null;
-    const buf = Buffer.from(res.stdout);
+    let buf: Buffer;
+    if (source.startsWith("http://") || source.startsWith("https://")) {
+      // Remote URL — fetch with curl (sync, short timeout)
+      const res = Bun.spawnSync(
+        ["curl", "-sfL", "--max-time", "5", source],
+        { stdout: "pipe" },
+      );
+      if (!res.stdout || res.stdout.length === 0) return null;
+      buf = Buffer.from(res.stdout);
+    } else {
+      // Local file path
+      if (!existsSync(source)) return null;
+      buf = Buffer.from(readFileSync(source));
+    }
     if (buf.length < 8) return null;
     let mime = "image/png";
     if (buf[0] === 0x52 && buf[1] === 0x49) mime = "image/webp";
