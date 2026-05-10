@@ -34,9 +34,11 @@ export function readViewportHeight(runtime = {}, options = {}) {
 
   if (hasViewportHeight) {
     if (options.keyboardActive === true) {
-      const viewportOffsetTop = Number(win?.visualViewport?.offsetTop || 0);
-      const keyboardHeight = viewportHeight + Math.max(0, Number.isFinite(viewportOffsetTop) ? viewportOffsetTop : 0);
-      return Math.round(keyboardHeight);
+      // When the software keyboard is visible, visualViewport.height already
+      // represents the usable space above it. Do not add offsetTop here.
+      // Inflating the measurement leaves the compose box partly under the
+      // keyboard on iOS. The PWA doc says to sync from visualViewport.height.
+      return Math.round(viewportHeight);
     }
     if (options.ignoreStandaloneChromeGap === true && hasInnerHeight && innerHeight > viewportHeight) {
       return Math.round(innerHeight);
@@ -66,22 +68,23 @@ function isVirtualKeyboardLikelyVisible(win: any): boolean {
   const viewportHeight = Number(win?.visualViewport?.height || 0);
   if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) return false;
 
-  const viewportOffsetTop = Number(win?.visualViewport?.offsetTop || 0);
-  const measuredViewportHeight = viewportHeight + Math.max(0, Number.isFinite(viewportOffsetTop) ? viewportOffsetTop : 0);
-  const screenHeight = readCurrentScreenHeight(win);
-  if (screenHeight && screenHeight > 0) {
-    // iOS standalone can keep focus on the textarea after the keyboard is hidden,
-    // while visualViewport/innerHeight are still the cold-start short values
-    // (screen height minus the top safe area). Treat that as "keyboard closed".
-    // A real software keyboard is a much larger shrink than the ~59px PWA chrome lie.
-    const keyboardThreshold = Math.max(120, Math.round(screenHeight * 0.16));
-    return measuredViewportHeight < screenHeight - keyboardThreshold;
-  }
-
   const innerHeight = Number(win?.innerHeight || 0);
   if (Number.isFinite(innerHeight) && innerHeight > 0) {
-    return measuredViewportHeight < innerHeight - 80;
+    // Primary signal: while the keyboard is open, visualViewport.height becomes
+    // materially smaller than innerHeight. This is more reliable than screen-
+    // based thresholds on iPad/tablet layouts and avoids treating the cold-start
+    // standalone chrome gap as a keyboard.
+    if (viewportHeight < innerHeight - 20) return true;
   }
+
+  const screenHeight = readCurrentScreenHeight(win);
+  if (screenHeight && screenHeight > 0) {
+    // Fallback: ignore the small cold-start standalone lie (~safe-area-top), but
+    // treat larger shrinks as an active keyboard.
+    const keyboardThreshold = Math.max(120, Math.round(screenHeight * 0.16));
+    return viewportHeight < screenHeight - keyboardThreshold;
+  }
+
   return false;
 }
 
