@@ -871,6 +871,12 @@ export function initDatabase(): void {
   db.exec(useMemory ? "PRAGMA journal_mode = MEMORY;" : "PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA secure_delete = ON;");
+  if (!useMemory) {
+    // A1: Use mmap for DB reads — moves page I/O from anonymous heap to file-backed memory.
+    db.exec("PRAGMA mmap_size = 268435456;"); // 256 MB
+    // A2: Reduce malloc'd page cache since mmap handles hot pages.
+    db.exec("PRAGMA cache_size = -1000;"); // 1 MB (was default 2 MB)
+  }
   migrateLegacyConfigTables(db);
   createSchema(db);
   ensureChatBranchConstraints(db);
@@ -1010,4 +1016,15 @@ export function closeDatabase(options?: { shrinkMemory?: boolean }): void {
       err: error,
     });
   }
+}
+
+/**
+ * A3: Release SQLite's internal page-cache allocations back to the OS.
+ * Safe to call periodically (e.g. after session eviction) without closing the DB.
+ */
+export function shrinkDatabaseMemory(): void {
+  if (!db) return;
+  try {
+    db.exec("PRAGMA shrink_memory;");
+  } catch (e) { void e; /* best-effort */ }
 }

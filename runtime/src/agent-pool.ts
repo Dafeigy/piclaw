@@ -59,6 +59,7 @@ import {
   deleteSshConfig,
   getSshConfig,
   listRecentChatJids,
+  shrinkDatabaseMemory,
   upsertSshConfig,
 } from "./db.js";
 import {
@@ -699,10 +700,18 @@ export class AgentPool {
 
   private evictIdle(): void {
     const pressure = this.getMemoryPressureMode();
+    const poolSizeBefore = this.pool.size + this.sidePool.size;
     this.sessionManager.evictIdle({
       mainIdleTtlMs: pressure.mainIdleTtlMs,
       sideIdleTtlMs: this.config.sideIdleTtlMs,
       mainSessionMaxSizeOverride: pressure.mainSessionMaxSizeOverride,
     });
+    const poolSizeAfter = this.pool.size + this.sidePool.size;
+    // A3 + A4: After evicting sessions, release SQLite page-cache and force GC
+    // so dead session objects (large fileEntries arrays) are reclaimed promptly.
+    if (poolSizeAfter < poolSizeBefore || pressure.active) {
+      shrinkDatabaseMemory();
+      Bun.gc(true);
+    }
   }
 }
