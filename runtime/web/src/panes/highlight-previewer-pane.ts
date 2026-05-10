@@ -1,0 +1,157 @@
+/**
+ * highlight-previewer-pane.ts — Syntax-highlighted source/text preview pane.
+ *
+ * Claims any text file that isn't markdown (priority ~10) and renders it
+ * with line numbers and full syntax highlighting via code-highlighting.ts.
+ * Replaces the unstyled plain-text branch of workspace-preview-pane.ts.
+ */
+
+import type { PaneCapability, PaneContext, PaneInstance, WebPaneExtension } from './pane-types.js';
+import { highlightCodeLinesAsHtml, parserForCodeFenceLanguage, normalizeCodeLanguageLabel } from '../utils/code-highlighting.js';
+
+const MARKDOWN_EXTENSIONS = /\.(md|mdx|markdown)$/i;
+
+/** Map file extension to language identifier for highlighting. */
+function extensionToLanguage(filePath: string): string {
+    const ext = (filePath.match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || '';
+    // Direct extension mapping — covers the most common cases
+    const map: Record<string, string> = {
+        ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+        py: 'python', rb: 'ruby', rs: 'rust', go: 'go', java: 'java',
+        c: 'c', h: 'c', cc: 'cpp', cpp: 'cpp', cxx: 'cpp', hpp: 'cpp', hxx: 'cpp',
+        cs: 'csharp', swift: 'swift', kt: 'kotlin',
+        sh: 'shell', bash: 'bash', zsh: 'zsh', fish: 'shell',
+        ps1: 'powershell', psm1: 'powershell',
+        json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+        xml: 'xml', html: 'html', htm: 'html', css: 'css', scss: 'sass', sass: 'sass',
+        sql: 'sql', graphql: 'graphql', gql: 'graphql',
+        dockerfile: 'dockerfile', makefile: 'makefile',
+        lua: 'lua', perl: 'perl', pl: 'perl', pm: 'perl',
+        r: 'r', jl: 'julia', hs: 'haskell', erl: 'erlang',
+        clj: 'clojure', scm: 'scheme', elm: 'elm',
+        ex: 'elixir', exs: 'elixir',
+        proto: 'protobuf', tf: 'hcl',
+        diff: 'diff', patch: 'diff',
+        ini: 'properties', conf: 'nginx', cfg: 'properties',
+        v: 'verilog', sv: 'verilog', vhd: 'vhdl', vhdl: 'vhdl',
+        pas: 'pascal', f90: 'fortran', f95: 'fortran',
+        cmake: 'cmake', groovy: 'groovy', gradle: 'groovy',
+        tex: 'stex', latex: 'stex', bib: 'stex',
+        d: 'd', nim: 'nim', zig: 'zig',
+        pug: 'pug', jade: 'pug', styl: 'stylus',
+        coffee: 'coffeescript',
+        tcl: 'tcl', ml: 'mllike', sml: 'mllike', fs: 'mllike',
+        wasm: 'wast', wat: 'wast',
+        pp: 'puppet', feature: 'gherkin',
+        ttl: 'turtle', rq: 'sparql', xq: 'xquery',
+    };
+    // Special filenames
+    const basename = filePath.split('/').pop()?.toLowerCase() || '';
+    if (basename === 'dockerfile' || basename.startsWith('dockerfile.')) return 'dockerfile';
+    if (basename === 'makefile' || basename === 'gnumakefile') return 'cmake'; // close enough
+    if (basename === '.env' || basename.endsWith('.env')) return 'properties';
+    if (basename === 'cmakelists.txt') return 'cmake';
+    if (basename === 'vagrantfile' || basename === 'rakefile' || basename === 'gemfile') return 'ruby';
+
+    return map[ext] || '';
+}
+
+class HighlightPreviewInstance implements PaneInstance {
+    private container: HTMLElement;
+    private content: string = '';
+    private lang: string = '';
+    private disposed = false;
+
+    constructor(container: HTMLElement, context: PaneContext) {
+        this.container = container;
+        const filePath = context?.path || '';
+        this.lang = extensionToLanguage(filePath);
+
+        // Get content from preview data or fetch
+        const preview = (context as any)?.preview;
+        if (preview?.content) {
+            this.content = preview.content;
+            this.render();
+        } else {
+            this.loadContent(filePath);
+        }
+    }
+
+    private async loadContent(filePath: string) {
+        if (this.disposed) return;
+        try {
+            const res = await fetch(`/workspace/raw?path=${encodeURIComponent(filePath)}`);
+            if (!res.ok) {
+                this.container.textContent = `Failed to load: ${res.status}`;
+                return;
+            }
+            this.content = await res.text();
+            if (!this.disposed) this.render();
+        } catch (err) {
+            if (!this.disposed) this.container.textContent = `Error loading file.`;
+        }
+    }
+
+    private render() {
+        const langLabel = this.lang ? normalizeCodeLanguageLabel(this.lang) : 'Plain text';
+        const hasParser = this.lang ? !!parserForCodeFenceLanguage(this.lang) : false;
+        const lines = hasParser
+            ? highlightCodeLinesAsHtml(this.content, this.lang)
+            : this.content.split('\n').map(line => this.escapeHtml(line) || '&nbsp;');
+
+        const lineNumbers = lines.map((_, i) => `<span class="hl-line-number">${i + 1}</span>`).join('\n');
+        const codeLines = lines.join('\n');
+
+        this.container.innerHTML = `
+            <div class="highlight-preview" style="height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-primary,#1e1e1e);">
+                <div class="hl-toolbar" style="flex:0 0 auto;padding:4px 12px;background:var(--bg-secondary,#252526);border-bottom:1px solid var(--border-color,#333);font-size:11px;color:var(--text-secondary,#888);display:flex;justify-content:space-between;">
+                    <span>${this.escapeHtml(langLabel)}</span>
+                    <span>${lines.length} lines</span>
+                </div>
+                <div class="hl-code-container" style="flex:1;overflow:auto;font-family:var(--code-font,'JetBrains Mono',monospace);font-size:13px;line-height:1.5;">
+                    <div style="display:flex;min-height:100%;">
+                        <pre class="hl-line-numbers" style="flex:0 0 auto;padding:8px 8px 8px 12px;text-align:right;color:var(--text-tertiary,#555);user-select:none;border-right:1px solid var(--border-color,#333);">${lineNumbers}</pre>
+                        <pre class="hl-code" style="flex:1;padding:8px 12px;margin:0;white-space:pre;overflow-x:auto;">${codeLines}</pre>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private escapeHtml(s: string): string {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    dispose() { this.disposed = true; this.container.innerHTML = ''; }
+    resize() {}
+    focus() {}
+    setContent(content: string) { this.content = content; this.render(); }
+    getContent() { return this.content; }
+    isDirty() { return false; }
+}
+
+export const highlightPreviewerPaneExtension: WebPaneExtension = {
+    id: 'highlight-previewer',
+    label: 'Source Preview',
+    icon: 'code',
+    capabilities: ['preview'] as PaneCapability[],
+    placement: 'tabs',
+
+    canHandle(context: PaneContext): boolean | number {
+        if (context?.mode !== 'view') return false;
+        const path = context?.path || '';
+        // Don't claim markdown (handled by markdown-preview pane)
+        if (MARKDOWN_EXTENSIONS.test(path)) return false;
+        // Claim any file that has a known language mapping
+        const lang = extensionToLanguage(path);
+        if (lang) return 10;
+        // Also claim generic text files from preview API
+        const preview = (context as any)?.preview;
+        if (preview?.kind === 'text' && preview?.content_type !== 'text/markdown') return 5;
+        return false;
+    },
+
+    mount(container: HTMLElement, context: PaneContext): PaneInstance {
+        return new HighlightPreviewInstance(container, context);
+    },
+};

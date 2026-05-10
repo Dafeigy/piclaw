@@ -11,6 +11,7 @@ import {
   officeViewerPaneExtension,
   dataViewerPaneExtension,
   webViewerPaneExtension,
+  highlightPreviewerPaneExtension,
   mindmapPaneExtension,
 } from '../panes/index.js';
 import {
@@ -60,6 +61,7 @@ export function registerAppPaneExtensions(): void {
   paneRegistry.register(officeViewerPaneExtension);
   paneRegistry.register(dataViewerPaneExtension);
   paneRegistry.register(webViewerPaneExtension);
+  paneRegistry.register(highlightPreviewerPaneExtension);
   paneRegistry.register(mindmapPaneExtension);
   paneRegistry.register(vncPaneExtension);
   preloadEditorBundle();

@@ -14,18 +14,18 @@
     "codemirror": "https://github.com/codemirror/basic-setup.git"
   },
   "source_entry": "extensions/viewers/editor/vendor/codemirror-entry.ts",
-  "output_file": "../../.piclaw/tmp/piclaw-codemirror-vendor-runtime-1778404707170/codemirror.js",
+  "output_file": "extensions/viewers/editor/vendor/codemirror.js",
   "output_files": [
     {
       "package_path": null,
-      "output_file": "../../.piclaw/tmp/piclaw-codemirror-vendor-runtime-1778404707170/codemirror.js",
-      "sha256": "58a06b3d682fbed70015dd60a25b938904c8504fceba05126d2c40536c04cde5",
-      "size_bytes": 1097412
+      "output_file": "extensions/viewers/editor/vendor/codemirror.js",
+      "sha256": "514a6e6b60e88ec0c79e669deca5143d4bb0c2c9ddceeda7cc8091041ad17928",
+      "size_bytes": 1390086
     }
   ],
   "metadata_file": "extensions/viewers/editor/vendor/codemirror.meta.json",
-  "sha256": "58a06b3d682fbed70015dd60a25b938904c8504fceba05126d2c40536c04cde5",
-  "size_bytes": 1097412,
+  "sha256": "514a6e6b60e88ec0c79e669deca5143d4bb0c2c9ddceeda7cc8091041ad17928",
+  "size_bytes": 1390086,
   "build_command": [
     "bun",
     "build",
@@ -34,6 +34,6 @@
     "--format=esm",
     "--minify",
     "--outfile",
-    "../../.piclaw/tmp/piclaw-codemirror-vendor-runtime-1778404707170/codemirror.js"
+    "extensions/viewers/editor/vendor/codemirror.js"
   ]
 }
