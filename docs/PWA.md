@@ -268,7 +268,7 @@ Currently not handled. If landscape support is added, use:
 
 ### Browser mode (Safari)
 
-iOS Safari natively scrolls the visual viewport to keep the focused input visible above the keyboard. The body stays `position: fixed; inset: 0`. No JS intervention needed. `100dvh` does NOT resize when the keyboard opens — the keyboard simply overlays the page and Safari scrolls the visual viewport.
+iOS Safari natively scrolls the visual viewport to keep the focused input visible above the keyboard. The body stays `position: fixed` with `height: var(--app-height)`. No JS intervention needed. `100dvh` does NOT resize when the keyboard opens — the keyboard simply overlays the page and Safari scrolls the visual viewport.
 
 ### Standalone PWA mode
 
@@ -290,7 +290,10 @@ When the keyboard closes:
 ```css
 body {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--app-height, 100dvh);
     overflow: hidden;
     overscroll-behavior: none;
 }
@@ -331,11 +334,11 @@ html, body { height: calc(100dvh + 1px); }
 document.documentElement.style.setProperty('--app-height', screen.height + 'px');
 ```
 
-**Why it fails (with position: fixed)**: The body has `position: fixed; inset: 0`. Fixed elements are constrained to the viewport (their containing block). Even though `--app-height` is set to 852px on the container, the body is only 793px (the lying viewport). The container tries to be 852px but is clipped by the body.
+**Why it fails (with position: fixed)**: The body has `position: fixed` and its height is determined by the viewport. Fixed elements are constrained to the viewport (their containing block). Even though `--app-height` is set to 852px on the container, the body is only 793px (the lying viewport) if it uses `inset: 0` or `bottom: 0` instead of an explicit `height: var(--app-height)`. The container tries to be 852px but is clipped by the body.
 
 **Why it fails (without position: fixed)**: Removing `position: fixed` from the body allows `screen.height` to work, but the keyboard pushes the entire page upward on focus (see §8.6).
 
-### ❌ 8.4: Negative `bottom` on fixed body
+### ❌ 8.4: Negative `bottom` on fixed body (and `inset: 0`)
 
 ```css
 body {
@@ -348,6 +351,8 @@ body {
 **Theory**: Extend the fixed body past the lying viewport by the amount it's short.
 
 **Why it fails**: iOS does not render fixed elements beyond the viewport boundary, even with `viewport-fit=cover`. The negative bottom is ignored or clipped. No visible change.
+
+**Also applies to `inset: 0`**: using `inset: 0` (which is shorthand for `top: 0; right: 0; bottom: 0; left: 0`) makes the body height equal to the lying viewport (793px), because `bottom: 0` pins the bottom edge to the viewport's lying bottom. The container at `height: 100vh` (852px) then overflows the body and is clipped by `overflow: hidden`. **Fix**: use `height: var(--app-height, 100dvh)` instead of `inset: 0` so the body height is set by the CSS variable rather than inferred from the lying viewport edges.
 
 ### ❌ 8.5: `env(safe-area-inset-bottom)` padding on compose box
 
@@ -455,7 +460,7 @@ window.matchMedia('(display-mode: standalone)').matches
 | File | Role | Key properties |
 |---|---|---|
 | `runtime/web/static/index.html` | Meta tags + pre-CSS bootstrap | `viewport-fit=cover`, `apple-mobile-web-app-capable`, `status-bar-style=black-translucent`, inline standalone `--app-height: 100vh` before bundled CSS |
-| `runtime/web/static/css/base.css` | Root layout | `--app-height: 100dvh` browser default plus comments pointing here, `body { position: fixed; inset: 0 }`, `text-size-adjust: 100%` |
+| `runtime/web/static/css/base.css` | Root layout | `--app-height: 100dvh` browser default plus comments pointing here, `body { position: fixed; height: var(--app-height) }`, `text-size-adjust: 100%` |
 | `runtime/web/static/css/editor.css` | Container & editor pane | `.container` must have exactly one height declaration: `height: var(--app-height, 100dvh)` plus `padding-top: env(safe-area-inset-top)`; `.editor-pane-container { height: var(--app-height, 100dvh) }` |
 | `runtime/web/static/css/workspace.css` | Workspace sidebar | `.workspace-sidebar { height: var(--app-height, 100dvh) }` |
 | `runtime/web/static/css/agent.css` | Agent panel | `max-height: calc(var(--app-height, 100dvh) - 32px)` |
@@ -468,12 +473,12 @@ window.matchMedia('(display-mode: standalone)').matches
 
 ```
 index.html (meta tags + standalone pre-CSS --app-height: 100vh bootstrap)
-  → base.css (--app-height: 100dvh browser default, body fixed)
+  → base.css (--app-height: 100dvh browser default, body { position:fixed; height: var(--app-height) })
     → editor.css / workspace.css / agent.css (use --app-height with 100dvh fallback)
       → mobile-viewport.ts (keeps --app-height at 100vh in standalone unless keyboard/text entry is active)
 ```
 
-**Critical invariant**: The CSS fallback (`100dvh`) must be correct for browser mode. The inline/runtime JS override (`100vh`) must run before standalone iOS paints and must be restored whenever the software keyboard is not measurably shrinking the viewport. Text focus alone is not keyboard visibility on iOS PWA. `.container` must not also declare `height: 100%`; duplicate height declarations can be reordered during bundling so the fixed value wins and the app-height override is ignored. If either side is wrong, one mode breaks.
+**Critical invariant**: The CSS fallback (`100dvh`) must be correct for browser mode. The inline/runtime JS override (`100vh`) must run before standalone iOS paints and must be restored whenever the software keyboard is not measurably shrinking the viewport. Text focus alone is not keyboard visibility on iOS PWA. `.container` must not also declare `height: 100%`; duplicate height declarations can be reordered during bundling so the fixed value wins and the app-height override is ignored. The body **must not** use `inset: 0` or `bottom: 0`; fixed elements with those constraints inherit the iOS standalone lying viewport height, clipping the container. Body must use `height: var(--app-height, 100dvh)` so it tracks the same variable as the container. If either side is wrong, one mode breaks.
 
 ---
 

@@ -57,6 +57,20 @@ test('container CSS has one app-height declaration so minification cannot overri
   expect(rule).not.toContain('height: 100%;');
 });
 
+test('body uses --app-height not inset:0 so iOS standalone is not capped to lying viewport', () => {
+  const css = readFileSync(new URL('../../web/static/css/base.css', import.meta.url), 'utf8');
+  const rule = readCssRule(css, 'body');
+  // body must use var(--app-height) for height, NOT inset:0 or bottom:0.
+  // Fixed elements with inset:0 inherit the iOS standalone lying viewport
+  // (~59px too short), clipping the container and creating a white gap.
+  // See docs/PWA.md.
+  expect(rule).toContain('height: var(--app-height, 100dvh);');
+  // Check for actual CSS declarations, not comment text
+  const declarations = rule.replace(/\/\*[\s\S]*?\*\//g, '');
+  expect(declarations).not.toMatch(/inset\s*:\s*0/);
+  expect(declarations).not.toMatch(/\bbottom\s*:\s*0/);
+});
+
 test('readViewportHeight prefers visualViewport height when available', () => {
   expect(readViewportHeight({
     window: {
