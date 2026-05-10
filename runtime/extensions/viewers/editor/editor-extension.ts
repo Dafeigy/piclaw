@@ -253,6 +253,7 @@ export class StandaloneEditorInstance implements PaneInstance {
     private saveRequestCb: ((content: string) => void) | null = null;
     private closeCb: (() => void) | null = null;
     private viewStateChangeCb: ((state: { cursorLine: number; cursorCol: number; scrollTop: number }) => void) | null = null;
+    private contentChangeCb: ((content: string) => void) | null = null;
 
     // External change detection
     private conflictMonitor: FileConflictMonitor | null = null;
@@ -580,7 +581,12 @@ export class StandaloneEditorInstance implements PaneInstance {
                 { key: 'Mod-s', run: () => { this.handleSave(); return true; } },
             ]),
             EditorView.updateListener.of((update: any) => {
-                if (update.docChanged) this.checkDirty();
+                if (update.docChanged) {
+                    this.checkDirty();
+                    if (this.contentChangeCb) {
+                        this.contentChangeCb(update.state.doc.toString());
+                    }
+                }
                 if ((update.selectionSet || update.docChanged) && this.viewStateChangeCb) {
                     const pos = update.state.selection.main.head;
                     const line = update.state.doc.lineAt(pos);
@@ -1075,6 +1081,7 @@ export class StandaloneEditorInstance implements PaneInstance {
         this.saveRequestCb = null;
         this.closeCb = null;
         this.viewStateChangeCb = null;
+        this.contentChangeCb = null;
     }
 
     onDirtyChange(cb: (dirty: boolean) => void): void {
@@ -1142,6 +1149,16 @@ export class StandaloneEditorInstance implements PaneInstance {
     /** Register callback for view state changes (cursor, scroll). */
     onViewStateChange(cb: (state: { cursorLine: number; cursorCol: number; scrollTop: number }) => void): void {
         this.viewStateChangeCb = cb;
+    }
+
+    /** Register callback for document content changes. Used by external previews. */
+    onContentChange(cb: (content: string) => void): () => void {
+        this.contentChangeCb = cb;
+        const current = this.getContent();
+        if (typeof current === 'string') cb(current);
+        return () => {
+            if (this.contentChangeCb === cb) this.contentChangeCb = null;
+        };
     }
 
     /** Restore view state (cursor position + scroll). */
