@@ -1276,9 +1276,7 @@
     width: 100%;
     max-width: 800px;
     margin: 0 auto;
-    /* Keep a single height declaration here. Bun's CSS minifier may reorder duplicate
-       `height` properties, causing `height: 100%` to override `--app-height` in the
-       shipped bundle and making iOS PWA viewport fixes invisible. See docs/PWA.md. */
+    height: 100%;
     height: var(--app-height, 100dvh);
     min-height: 0;
     padding-top: env(safe-area-inset-top, 0px);

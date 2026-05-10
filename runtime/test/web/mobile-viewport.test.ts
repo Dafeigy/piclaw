@@ -50,25 +50,25 @@ test('index bootstraps standalone app height before loading bundled CSS', () => 
   expect(html).toContain("document.documentElement.style.setProperty('--app-height', '100vh')");
 });
 
-test('container CSS has one app-height declaration so minification cannot override it with height 100%', () => {
+test('container CSS uses height:100% as primary with --app-height fallback', () => {
   const css = readFileSync(new URL('../../web/static/css/editor.css', import.meta.url), 'utf8');
   const rule = readCssRule(css, '.container');
+  // Container must have height:100% so it inherits body's inset:0 geometry.
+  // The --app-height declaration is a progressive enhancement for keyboard handling
+  // but Bun's CSS minifier reorders duplicates so height:100% wins — this is correct.
+  expect(rule).toContain('height: 100%;');
   expect(rule).toContain('height: var(--app-height, 100dvh);');
-  expect(rule).not.toContain('height: 100%;');
 });
 
-test('body uses --app-height not inset:0 so iOS standalone is not capped to lying viewport', () => {
+test('body uses position:fixed + inset:0 for reliable viewport stretch', () => {
   const css = readFileSync(new URL('../../web/static/css/base.css', import.meta.url), 'utf8');
   const rule = readCssRule(css, 'body');
-  // body must use var(--app-height) for height, NOT inset:0 or bottom:0.
-  // Fixed elements with inset:0 inherit the iOS standalone lying viewport
-  // (~59px too short), clipping the container and creating a white gap.
-  // See docs/PWA.md.
-  expect(rule).toContain('height: var(--app-height, 100dvh);');
-  // Check for actual CSS declarations, not comment text
+  // body must use inset:0 for edge-to-edge viewport coverage via CSS geometry.
+  // Do NOT replace with height:var(--app-height) — iOS standalone reports
+  // wrong values for 100vh/100dvh on cold start, but inset:0 stretches correctly.
   const declarations = rule.replace(/\/\*[\s\S]*?\*\//g, '');
-  expect(declarations).not.toMatch(/inset\s*:\s*0/);
-  expect(declarations).not.toMatch(/\bbottom\s*:\s*0/);
+  expect(declarations).toMatch(/inset\s*:\s*0/);
+  expect(declarations).toMatch(/position\s*:\s*fixed/);
 });
 
 test('readViewportHeight prefers visualViewport height when available', () => {

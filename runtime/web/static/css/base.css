@@ -229,18 +229,8 @@ html {
 
 body {
     position: fixed;
-    /* Do NOT use `inset: 0` or `bottom: 0` here. iOS standalone PWAs
-       cold-start the viewport ~59px too short (WebKit bug #254868). Fixed
-       elements with inset:0 inherit that lying viewport height, clipping
-       the container and creating a white gap at the bottom of the screen.
-       Using var(--app-height) lets the inline index.html bootstrap and
-       mobile-viewport.ts set the body to 100vh (= full screen) in
-       standalone mode while keeping 100dvh (= visible viewport) in Safari
-       browser mode. See docs/PWA.md before changing this. */
-    top: 0;
-    left: 0;
-    right: 0;
-    height: var(--app-height, 100dvh);
+    inset: 0;
+    min-height: 100%;
     font-family: var(--font-family);
     font-size: var(--font-size-md);
     line-height: var(--line-height);
