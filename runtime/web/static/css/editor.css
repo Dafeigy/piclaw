@@ -1282,6 +1282,12 @@
     height: var(--app-height, 100dvh);
     min-height: 0;
     padding-top: env(safe-area-inset-top, 0px);
+    /* iOS standalone bottom gap: env(safe-area-inset-bottom) returns 0px in
+       standalone PWAs (WebKit bug), so we use --standalone-bottom-gap set by
+       mobile-viewport.ts from measured screen.height - innerHeight. This keeps
+       compose within the lying viewport's interactive zone while the body at
+       100vh fills the full screen visually. See docs/PWA.md §2, §9. */
+    padding-bottom: var(--standalone-bottom-gap, 0px);
     background-color: var(--bg-primary);
     display: flex;
     flex-direction: column;

@@ -164,6 +164,20 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
   // See docs/PWA.md before changing this path.
   doc.documentElement?.style?.setProperty?.('--app-height', '100vh');
 
+  // iOS standalone lying viewport: innerHeight/visualViewport report ~59px less
+  // than screen.height (WebKit bug #254868). The body uses 100vh (= full screen),
+  // but touch events only register within the lying viewport (innerHeight).
+  // Add bottom padding to the container so compose stays within the interactive
+  // zone while the padding fills the visual gap. env(safe-area-inset-bottom)
+  // is unreliable in standalone (returns 0px), so we measure the gap directly.
+  // See docs/PWA.md §2, §9.
+  const screenH = Math.round(Math.max(Number(win.screen?.width || 0), Number(win.screen?.height || 0)));
+  const innerH = Number(win.innerHeight || 0);
+  if (screenH > 0 && innerH > 0 && screenH > innerH) {
+    const gap = screenH - innerH;
+    doc.documentElement.style.setProperty('--standalone-bottom-gap', `${gap}px`);
+  }
+
   let rafId = 0;
   const timers = new Set();
 

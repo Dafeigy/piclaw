@@ -47,12 +47,23 @@
                         window.matchMedia('(display-mode: fullscreen)').matches ||
                         window.matchMedia('(display-mode: minimal-ui)').matches;
                 }
-                if (standalone) document.documentElement.style.setProperty('--app-height', '100vh');
+                if (standalone) {
+                    document.documentElement.style.setProperty('--app-height', '100vh');
+                    // Measure the lying viewport gap (screen.height - innerHeight)
+                    // and set --standalone-bottom-gap so container padding keeps
+                    // compose within the interactive zone. env(safe-area-inset-bottom)
+                    // returns 0px in standalone (WebKit bug). See docs/PWA.md.
+                    var sh = Math.max(screen.width || 0, screen.height || 0);
+                    var ih = window.innerHeight || 0;
+                    if (sh > ih && ih > 0) {
+                        document.documentElement.style.setProperty('--standalone-bottom-gap', (sh - ih) + 'px');
+                    }
+                }
             } catch(e) {}
         })();
     </script>
-    <link rel="stylesheet" href="/static/dist/app.bundle.css?v=84e73d7294fa">
-    <link id="dynamic-manifest" rel="manifest" href="/manifest.json?v=84e73d7294fa">
+    <link rel="stylesheet" href="/static/dist/app.bundle.css?v=c9990ab663fc">
+    <link id="dynamic-manifest" rel="manifest" href="/manifest.json?v=c9990ab663fc">
     <link id="dynamic-favicon" rel="icon" href="/favicon.ico">
     <link id="dynamic-apple-touch-icon" rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link id="dynamic-apple-touch-icon-180" rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
@@ -148,6 +159,6 @@
       }
     }
     </script>
-    <script type="module" src="/static/dist/app.bundle.js?v=84e73d7294fa"></script>
+    <script type="module" src="/static/dist/app.bundle.js?v=c9990ab663fc"></script>
 </body>
 </html>
