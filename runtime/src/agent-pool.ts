@@ -59,6 +59,7 @@ import {
   deleteSshConfig,
   getSshConfig,
   listRecentChatJids,
+  pruneOldTokenUsage,
   shrinkDatabaseMemory,
   upsertSshConfig,
 } from "./db.js";
@@ -285,6 +286,11 @@ export class AgentPool {
       () => this.evictIdle(),
       this.config.cleanupIntervalMs,
     );
+    // B4: Prune old token_usage rows once on startup (90-day retention).
+    try {
+      const pruned = pruneOldTokenUsage(90);
+      if (pruned > 0) log.info(`Pruned ${pruned} token_usage rows older than 90 days`);
+    } catch (e) { void e; }
   }
 
   private applyRateLimitRetryDefaults(): void {
