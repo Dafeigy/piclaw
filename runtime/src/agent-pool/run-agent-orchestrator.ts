@@ -1125,6 +1125,27 @@ export async function runAgentPrompt(
 
     const runResult: AgentOutput = await withChatContext(chatJid, channel, async () => {
       while (true) {
+        // Yield to the event loop on every iteration. Prevents synchronous-
+        // throw + catch + retry from starving the event loop when the error
+        // path never reaches an await that actually suspends.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        // Hard wall-clock escape hatch: if the entire run (including all
+        // recovery attempts) has exceeded the timeout, bail out.
+        if (timeoutMs > 0) {
+          const loopElapsedMs = Date.now() - startTime;
+          if (loopElapsedMs > timeoutMs) {
+            const duration = Date.now() - startTime;
+            writeAgentLog(options.logsDir, chatJid, duration, false, null,
+              `Recovery loop exceeded timeout (${loopElapsedMs}ms > ${timeoutMs}ms)`);
+            return {
+              status: "error" as const,
+              result: null,
+              error: `Agent run timed out after ${Math.round(loopElapsedMs / 1000)}s`,
+            };
+          }
+        }
+
         const attempt = await runPromptAttempt(
           prompt,
           chatJid,
