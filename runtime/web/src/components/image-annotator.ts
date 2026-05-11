@@ -232,15 +232,19 @@ export function ImageAnnotator({ src, onSave, onCancel }) {
   const [textValue, setTextValue] = useState('');
   const textInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize canvas to image dimensions
+  // Initialize canvas to match the displayed image size (not natural size)
+  // so pointer coordinates align with what the user sees.
   const initCanvas = useCallback(() => {
     const img = imgRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
     if (!img || !canvas || !overlay) return;
 
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
+    // Use the displayed (CSS) dimensions so canvas coords match pointer events
+    const rect = img.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(rect.width * dpr);
+    const h = Math.round(rect.height * dpr);
     canvas.width = w;
     canvas.height = h;
     overlay.width = w;
@@ -442,13 +446,15 @@ export function ImageAnnotator({ src, onSave, onCancel }) {
     if (!canvas || !img) return;
     setSaving(true);
     try {
-      // Build composited image
+      // Build composited image at the annotation canvas resolution
       const out = document.createElement('canvas');
       out.width = canvas.width;
       out.height = canvas.height;
       const octx = out.getContext('2d');
       if (!octx) return;
-      octx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Draw source image scaled to canvas size
+      octx.drawImage(img, 0, 0, out.width, out.height);
+      // Draw annotation overlay on top
       octx.drawImage(canvas, 0, 0);
 
       const blob: Blob = await new Promise((resolve, reject) => {
@@ -474,15 +480,12 @@ export function ImageAnnotator({ src, onSave, onCancel }) {
     }
   }, [tool]);
 
-  const touchAction = seenPenRef.current ? 'auto' : 'none';
-
   return html`
-    <div class="image-annotator" style="touch-action: ${touchAction}">
+    <div class="image-annotator" style="touch-action: none">
       <div class="image-annotator-canvas-wrap">
         <img
           ref=${imgRef}
           src=${src}
-          crossOrigin="anonymous"
           class="image-annotator-source"
           alt="Source"
           draggable="false"
