@@ -71,14 +71,15 @@ function estimateMessageTokens(message: any): number {
   }
 }
 
-/** Short-lived cache for estimateContextTokensFromSession to avoid
+/** Short-lived per-session-manager cache for estimateContextTokensFromSession to avoid
  *  rebuilding the full session context on every call. */
-let _ctxEstimateCache: {
+type ContextEstimateCacheEntry = {
   leafId: string;
   entryCount: number;
   tokens: number;
   at: number;
-} | null = null;
+};
+const ctxEstimateCache = new WeakMap<object, ContextEstimateCacheEntry>();
 const CTX_ESTIMATE_CACHE_TTL_MS = 2_000;
 
 export function estimateContextTokensFromSession(session: AgentSession): number {
@@ -86,14 +87,15 @@ export function estimateContextTokensFromSession(session: AgentSession): number 
   const leafId = typeof mgr.getLeafId === "function" ? (mgr.getLeafId() ?? "") : "";
   const entryCount = typeof mgr.getEntries === "function" ? mgr.getEntries().length : -1;
   const now = Date.now();
+  const cached = ctxEstimateCache.get(mgr as object);
 
   if (
-    _ctxEstimateCache &&
-    _ctxEstimateCache.leafId === leafId &&
-    _ctxEstimateCache.entryCount === entryCount &&
-    now - _ctxEstimateCache.at < CTX_ESTIMATE_CACHE_TTL_MS
+    cached &&
+    cached.leafId === leafId &&
+    cached.entryCount === entryCount &&
+    now - cached.at < CTX_ESTIMATE_CACHE_TTL_MS
   ) {
-    return _ctxEstimateCache.tokens;
+    return cached.tokens;
   }
 
   const context = mgr.buildSessionContext();
@@ -108,13 +110,13 @@ export function estimateContextTokensFromSession(session: AgentSession): number 
   if (!hasCompactionSummary) {
     const usage = session.getContextUsage?.();
     if (typeof usage?.tokens === "number") {
-      _ctxEstimateCache = { leafId, entryCount, tokens: usage.tokens, at: now };
+      ctxEstimateCache.set(mgr as object, { leafId, entryCount, tokens: usage.tokens, at: now });
       return usage.tokens;
     }
   }
 
   const tokens = context.messages.reduce((total: number, message: any) => total + estimateMessageTokens(message), 0);
-  _ctxEstimateCache = { leafId, entryCount, tokens, at: now };
+  ctxEstimateCache.set(mgr as object, { leafId, entryCount, tokens, at: now });
   return tokens;
 }
 
