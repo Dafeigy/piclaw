@@ -472,35 +472,33 @@ export function ImageAnnotator({ src, onSave, onCancel }) {
           alt="Source"
           draggable="false"
         />
-        ${canvasReady && html`
-          <canvas
-            ref=${canvasRef}
-            class="image-annotator-draw-canvas"
-          />
-          <canvas
-            ref=${overlayRef}
-            class="image-annotator-preview-canvas"
-          />
-          ${textInput.visible && html`
-            <div
-              class="image-annotator-text-input-wrap"
-              style="left: ${(textInput.position.x / (canvasRef.current?.width || 1)) * 100}%; top: ${(textInput.position.y / (canvasRef.current?.height || 1)) * 100}%"
-            >
-              <input
-                ref=${textInputRef}
-                type="text"
-                class="image-annotator-text-input"
-                value=${textValue}
-                onInput=${(e) => setTextValue(e.currentTarget.value)}
-                onKeyDown=${(e) => {
-                  if (e.key === 'Enter') commitTextLabel();
-                  if (e.key === 'Escape') cancelTextLabel();
-                }}
-                placeholder="Type label…"
-                style="color: ${color}"
-              />
-            </div>
-          `}
+        <canvas
+          ref=${canvasRef}
+          class="image-annotator-draw-canvas"
+        />
+        <canvas
+          ref=${overlayRef}
+          class="image-annotator-preview-canvas"
+        />
+        ${textInput.visible && html`
+          <div
+            class="image-annotator-text-input-wrap"
+            style="left: ${(textInput.position.x / (canvasRef.current?.width || 1)) * 100}%; top: ${(textInput.position.y / (canvasRef.current?.height || 1)) * 100}%"
+          >
+            <input
+              ref=${textInputRef}
+              type="text"
+              class="image-annotator-text-input"
+              value=${textValue}
+              onInput=${(e) => setTextValue(e.currentTarget.value)}
+              onKeyDown=${(e) => {
+                if (e.key === 'Enter') commitTextLabel();
+                if (e.key === 'Escape') cancelTextLabel();
+              }}
+              placeholder="Type label…"
+              style="color: ${color}"
+            />
+          </div>
         `}
       </div>
       <div class="image-annotator-toolbar">
