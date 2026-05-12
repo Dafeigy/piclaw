@@ -7,7 +7,7 @@
  *
  * Reads the current chat JID from AsyncLocalStorage/env at execution time.
  */
-import { basename, resolve, relative } from "path";
+import { basename, resolve, relative, isAbsolute } from "path";
 import { Type, type Static } from "typebox";
 import type {
   AgentToolResult,
@@ -64,7 +64,7 @@ function resolveWorkspacePath(inputPath: string): string | null {
   if (!inputPath) return null;
   const resolved = resolve(WORKSPACE_DIR, inputPath);
   const rel = relative(WORKSPACE_DIR, resolved);
-  if (rel.startsWith("..") || rel.startsWith("/")) return null;
+  if (rel.startsWith("..") || rel.startsWith("/") || isAbsolute(rel)) return null;
   return resolved;
 }
 
