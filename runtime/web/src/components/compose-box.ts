@@ -2370,6 +2370,25 @@ export function ComposeBox({
         setSubmitError(null);
     };
 
+    // Listen for annotated image attachments from the image annotator
+    useEffect(() => {
+        const onComposeMediaAttach = async (e) => {
+            const mediaId = e?.detail?.mediaId;
+            if (!mediaId) return;
+            try {
+                const { getMediaBlob } = await import('../api.js');
+                const blob = await getMediaBlob(mediaId);
+                const file = new File([blob], `annotated-${mediaId}.png`, { type: blob.type || 'image/png' });
+                setMediaFiles((current) => [...current, file]);
+                textareaRef.current?.focus();
+            } catch (err) {
+                console.warn('[compose-box] Failed to attach annotated image:', err);
+            }
+        };
+        window.addEventListener('piclaw:compose-media-attach', onComposeMediaAttach);
+        return () => window.removeEventListener('piclaw:compose-media-attach', onComposeMediaAttach);
+    }, []);
+
     const handleFileChange = (e) => {
         addMediaFiles(e.target.files);
         e.target.value = '';

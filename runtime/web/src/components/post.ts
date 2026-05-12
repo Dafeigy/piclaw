@@ -1070,14 +1070,12 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
 
     const handleAnnotationSend = useCallback(async () => {
         if (!annotationResult?.id) return;
-        try {
-            const { sendAgentMessage } = await import('../api.js');
-            await sendAgentMessage('default', '', null, [annotationResult.id], null, post.chat_jid);
-        } catch (err) {
-            console.warn('[post] Failed to send annotated image:', err);
-        }
+        // Attach the annotated image to the compose box so user can add commentary
+        window.dispatchEvent(new CustomEvent('piclaw:compose-media-attach', {
+            detail: { mediaId: annotationResult.id, mediaUrl: annotationResult.url },
+        }));
         setAnnotationResult(null);
-    }, [annotationResult, post.chat_jid]);
+    }, [annotationResult]);
 
     const handleAnnotationDiscard = useCallback(() => {
         setAnnotationResult(null);
@@ -1627,7 +1625,7 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
                 <div class="post-annotation-actions">
                     <button class="post-annotation-send-btn" onClick=${handleAnnotationSend}>
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                        Send to timeline
+                        Send
                     </button>
                     <button class="post-annotation-discard-btn" onClick=${handleAnnotationDiscard}>Discard</button>
                 </div>
