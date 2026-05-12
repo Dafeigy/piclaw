@@ -99,6 +99,8 @@ async function summarizeToolOutputSemantically(
   request: SemanticSummaryRequest,
   extensionContext: RuntimeExtensionContext | undefined,
 ): Promise<string | null> {
+  if (extensionContext?.signal?.aborted) return null;
+
   if (semanticSummarizerOverride) {
     try {
       return await semanticSummarizerOverride(request, extensionContext);
@@ -137,6 +139,7 @@ async function summarizeToolOutputSemantically(
     (timeout as any).unref?.();
     const onAbort = () => controller.abort();
     extensionContext.signal?.addEventListener("abort", onAbort, { once: true });
+    if (extensionContext.signal?.aborted) controller.abort();
 
     try {
       const response = await completeSimple(

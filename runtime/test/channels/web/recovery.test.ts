@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildInterruptedTurnOutcomeMarker,
   recoverInflightRuns,
   recoverStaleInflightRun,
   resumePendingChats,
@@ -10,6 +11,24 @@ import { AgentQueue } from "../../../src/queue.js";
 import { waitFor } from "../../helpers.js";
 
 describe("web recovery helpers", () => {
+  test("buildInterruptedTurnOutcomeMarker uses cause-specific detail text", () => {
+    expect(buildInterruptedTurnOutcomeMarker("service_restart")).toMatchObject({
+      type: "turn_outcome_marker",
+      kind: "interrupted",
+      title: "Turn interrupted",
+      detail: "The service restarted before the reply finished.",
+      cause: "service_restart",
+    });
+
+    expect(buildInterruptedTurnOutcomeMarker("runtime_stale")).toMatchObject({
+      type: "turn_outcome_marker",
+      kind: "interrupted",
+      title: "Turn interrupted",
+      detail: "The previous run stalled before the reply finished.",
+      cause: "runtime_stale",
+    });
+  });
+
   test("recoverInflightRuns clears stale preflight markers before handling inflight runs", () => {
     const clearedPreflight: string[] = [];
     const clearedInflight: string[] = [];

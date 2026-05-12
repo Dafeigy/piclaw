@@ -99,6 +99,51 @@ describe("context-mode integration", () => {
     });
   });
 
+  test("skips semantic summarization when turn signal is already aborted", async () => {
+    await withTempWorkspaceEnv("piclaw-context-mode-", compactionEnv({
+      PICLAW_TOOL_OUTPUT_STORE_BYTES: "8",
+      PICLAW_TOOL_OUTPUT_STORE_LINES: "2",
+      PICLAW_TOOL_RESULT_SEMANTIC_SUMMARY_ENABLED: "1",
+    }), async () => {
+      const db = await importFresh<typeof import("../src/db.js")>("../src/db.js");
+      db.initDatabase();
+
+      const contextMode = await importFresh<any>("../extensions/integrations/context-mode.ts");
+      let summarizeCalls = 0;
+      contextMode.__setSemanticToolResultSummarizerForTests(async () => {
+        summarizeCalls += 1;
+        return "Summary:\n- should not run";
+      });
+
+      try {
+        const fake = createFakeExtensionApi({ allTools: [] });
+        contextMode.default(fake.api);
+
+        const toolResult = fake.handlers.find((entry) => entry.event === "tool_result")?.handler;
+        const abortController = new AbortController();
+        abortController.abort();
+
+        const result = await toolResult?.({
+          toolName: "bash",
+          content: [{ type: "text", text: "alpha\nbeta\ngamma\n" }],
+          details: {},
+          input: { command: "printf" },
+          isError: false,
+          toolCallId: "tool-sem-aborted",
+          type: "tool_result",
+        }, {
+          signal: abortController.signal,
+        });
+
+        expect(result?.content?.[0]?.text).toContain("Preview:");
+        expect(result?.content?.[0]?.text).not.toContain("Semantic summary:");
+        expect(summarizeCalls).toBe(0);
+      } finally {
+        contextMode.__setSemanticToolResultSummarizerForTests(null);
+      }
+    });
+  });
+
   test("falls back to preview when semantic summarization fails", async () => {
     await withTempWorkspaceEnv("piclaw-context-mode-", compactionEnv({
       PICLAW_TOOL_OUTPUT_STORE_BYTES: "8",
