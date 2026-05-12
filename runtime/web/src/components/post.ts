@@ -942,13 +942,17 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
     const data = post.data;
     const isAgent = data.type === 'agent_response';
     const resolvedUserName = userName || 'You';
-    const displayName = isAgent ? (agentName || DEFAULT_AGENT_NAME) : resolvedUserName;
+    const isPeerAgentMessage = Boolean(!isAgent && peerMessageMeta?.sourceAgentName);
+    const displayName = isPeerAgentMessage
+        ? (agentName || DEFAULT_AGENT_NAME)
+        : isAgent ? (agentName || DEFAULT_AGENT_NAME) : resolvedUserName;
     const searchChatAgentName = typeof post.chat_agent_name === 'string' ? post.chat_agent_name.trim() : '';
     const showSearchChatAgentTag = Boolean(isAgent && highlightQuery && searchChatAgentName && searchChatAgentName !== displayName);
 
-    // Get avatar info based on the name
-    const avatarInfo = isAgent
-        ? getAvatarInfo(agentName, agentAvatarUrl, true)
+    // Get avatar info based on the name.
+    // Peer agent messages (cross-session relay) use the agent avatar.
+    const avatarInfo = (isAgent || isPeerAgentMessage)
+        ? getAvatarInfo(isPeerAgentMessage ? peerMessageMeta.sourceAgentName : agentName, agentAvatarUrl, true)
         : getAvatarInfo(resolvedUserName, userAvatarUrl);
     const normalizedUserBackground = typeof userAvatarBackground === 'string'
         ? userAvatarBackground.trim().toLowerCase()
@@ -957,7 +961,7 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
         && (normalizedUserBackground === 'clear' || normalizedUserBackground === 'transparent');
     // Keep agent avatars with transparent background when an image is set,
     // matching user avatar behavior when background is cleared.
-    const clearAgentBackground = isAgent && Boolean(avatarInfo.image);
+    const clearAgentBackground = (isAgent || isPeerAgentMessage) && Boolean(avatarInfo.image);
     const avatarStyle = `background-color: ${(clearUserBackground || clearAgentBackground) ? 'transparent' : avatarInfo.color}`;
 
     const contentMeta = data.content_meta;
@@ -976,7 +980,7 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
     const blocks = data.content_blocks || [];
     const mediaIds = data.media_ids || [];
     const peerMessageMeta = getPeerMessageMeta(blocks);
-    const showPeerAgentTag = Boolean(peerMessageMeta?.sourceAgentName);
+    const showPeerAgentTag = Boolean(peerMessageMeta?.sourceAgentName && isPeerAgentMessage);
 
     // Keep original message text even when link previews are available.
     let displayContent = getDisplayContent(data.content, data.link_previews);
@@ -1332,7 +1336,7 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
 
     return html`
         <div id=${`post-${post.id}`} class="post ${isAgent ? 'agent-post' : ''} ${isThreadReply ? 'thread-reply' : ''} ${isThreadPrev ? 'thread-prev' : ''} ${isThreadNext ? 'thread-next' : ''} ${isRemoving ? 'removing' : ''}" onClick=${onClick}>
-            <div class="post-avatar ${isAgent ? 'agent-avatar' : ''} ${avatarInfo.image ? 'has-image' : ''}" style=${avatarStyle}>
+            <div class="post-avatar ${(isAgent || isPeerAgentMessage) ? 'agent-avatar' : ''} ${avatarInfo.image ? 'has-image' : ''}" style=${avatarStyle}>
                 ${avatarInfo.image ? html`<img src=${avatarInfo.image} alt=${displayName} />` : avatarInfo.letter}
             </div>
             <div class="post-body">
