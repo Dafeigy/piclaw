@@ -40,6 +40,7 @@ import {
     persistPwaDisplayScalePercent,
     readStoredPwaDisplayScalePercent,
 } from '../ui/pwa-display-scale.js';
+import { getRecentFiles } from '../ui/recent-files.js';
 
 const isHiddenNode = (node) => {
     if (!node || !node.name) return false;
@@ -2346,6 +2347,21 @@ export function WorkspaceExplorer({
                             <div class="workspace-menu-dropdown" ref=${headerMenuRef} role="menu" aria-label="Workspace options">
                                 <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuCreateFile} disabled=${uploading}>New file</button>
                                 <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuUploadFiles} disabled=${uploading}>Upload files</button>
+                                ${(() => {
+                                    const recent = getRecentFiles();
+                                    if (recent.length === 0) return null;
+                                    return html`
+                                        <div class="workspace-menu-separator"></div>
+                                        <div class="workspace-menu-submenu-label">Open Recent</div>
+                                        ${recent.map((path) => {
+                                            const label = path.split('/').pop() || path;
+                                            return html`
+                                                <button class="workspace-menu-item workspace-menu-recent-item" role="menuitem" title=${path} onClick=${() => runMenuAction(() => onOpenEditorRef.current?.(path))}>${label}</button>
+                                            `;
+                                        })}
+                                    `;
+                                })()}
+                                <div class="workspace-menu-separator"></div>
                                 <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuRefresh}>Refresh tree</button>
                                 <button class="workspace-menu-item" role="menuitem" onClick=${() => runMenuAction(() => handleWorkspaceReindex())} disabled=${workspaceReindexing}>
                                     ${workspaceReindexing ? 'Reindexing workspace…' : 'Reindex workspace'}

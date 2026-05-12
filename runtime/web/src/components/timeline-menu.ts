@@ -13,6 +13,7 @@ import {
     persistPwaDisplayScalePercent,
     readStoredPwaDisplayScalePercent,
 } from '../ui/pwa-display-scale.js';
+import { getRecentFiles } from '../ui/recent-files.js';
 
 export function TimelineMenu({
     workspaceOpen,
@@ -192,6 +193,21 @@ export function TimelineMenu({
 
                 <div class="workspace-menu-separator"></div>
                 <button class="workspace-menu-item" role="menuitem" disabled=${!workspaceOpen} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:workspace-action', { detail: { action: 'new-file' } })))}>New file</button>
+                ${(() => {
+                    const recent = getRecentFiles();
+                    if (recent.length === 0) return null;
+                    return html`
+                        <div class="workspace-menu-separator"></div>
+                        <div class="workspace-menu-submenu-label">Open Recent</div>
+                        ${recent.map((path) => {
+                            const label = path.split('/').pop() || path;
+                            return html`
+                                <button class="workspace-menu-item workspace-menu-recent-item" role="menuitem" title=${path} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:pane-open', { detail: { path, target: 'tab' } })))}>${label}</button>
+                            `;
+                        })}
+                    `;
+                })()}
+                <div class="workspace-menu-separator"></div>
                 <button class="workspace-menu-item" role="menuitem" disabled=${!workspaceOpen} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:workspace-action', { detail: { action: 'refresh' } })))}>Refresh tree</button>
                 <button class="workspace-menu-item" role="menuitem" disabled=${!workspaceOpen} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:workspace-action', { detail: { action: 'reindex' } })))}>Reindex workspace</button>
                 <button class=${`workspace-menu-item${showHidden ? ' active' : ''}`} role="menuitem" disabled=${!workspaceOpen} onClick=${() => run(() => {
