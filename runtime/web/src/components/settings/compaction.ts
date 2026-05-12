@@ -125,8 +125,6 @@ export function CompactionSection({ settingsData, setStatus, mergeSettingsData }
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(async () => {
             if (!mountedRef.current) return;
-            const active = document.activeElement;
-            if (active && active.closest?.('.settings-number-stepper')) return;
             try {
                 setStatus?.('Saving compaction settings…', 'info');
                 const response = await fetch('/agent/settings/compaction', {
