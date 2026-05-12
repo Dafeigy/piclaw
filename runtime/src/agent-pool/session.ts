@@ -538,7 +538,7 @@ function trimPreCompactionEntries(sessionDir: string): void {
   // On subsequent trims (new compaction appended to already-trimmed file),
   // the archive already holds the original full history from the first trim.
   const archiveDir = join(sessionDir, "archive");
-  const fileName = latestFile.split("/").pop()!;
+  const fileName = latestFile.split(/[/\\]/).pop()!;
   const archivePath = join(archiveDir, fileName);
   const needsArchive = !existsSync(archivePath);
   if (needsArchive) {
