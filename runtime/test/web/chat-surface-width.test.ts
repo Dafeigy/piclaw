@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const cssRoot = path.join(import.meta.dir, "../../web/static/css");
+const cssRoot = path.join(import.meta.dir, "../../web/static/classic/css");
 const chatCss = readFileSync(path.join(cssRoot, "chat.css"), "utf8");
 const agentCss = readFileSync(path.join(cssRoot, "agent.css"), "utf8");
 const responsiveCss = readFileSync(path.join(cssRoot, "responsive.css"), "utf8");

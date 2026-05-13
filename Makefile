@@ -22,13 +22,12 @@
 #   push           – Push commits and current tag to origin.
 #
 # Web build notes:
-#   The web frontend now builds into two bundles under web/static/dist/:
-#     - app.bundle.js   (authenticated web UI)
-#     - login.bundle.js (login page behavior)
+#   The web frontend builds authenticated UI assets under web/static/classic/dist
+#   and shared/login assets under web/static/common/dist.
 #
 #   Vendor libs remain separate pre-built assets where useful (e.g. codemirror,
-#   marked, katex, mermaid). request-router-service.ts auth-gates app.bundle.js
-#   and only allows login.bundle.js pre-auth.
+#   marked, katex, mermaid) under web/static/common/. request-router-service.ts
+#   auth-gates app.bundle.js and only allows login.bundle.js pre-auth.
 
 IMAGE ?= pibox
 TAG ?= latest
@@ -70,25 +69,25 @@ build: ## Build Docker image
 vendor: ## Build the checked-in vendored bundles + metadata
 	cd runtime && bun run build:vendor
 	@ls -lh \
-		runtime/web/static/js/vendor/beautiful-mermaid.js \
-		runtime/web/static/js/vendor/beautiful-mermaid.meta.json \
+		runtime/web/static/common/js/vendor/beautiful-mermaid.js \
+		runtime/web/static/common/js/vendor/beautiful-mermaid.meta.json \
 		runtime/extensions/viewers/editor/vendor/codemirror.js \
 		runtime/extensions/viewers/editor/vendor/codemirror.meta.json \
-		runtime/web/static/js/vendor/preact-htm.js \
-		runtime/web/static/js/vendor/preact-htm.meta.json \
-		runtime/web/static/js/marked.min.js \
-		runtime/web/static/js/marked.meta.json \
-		runtime/web/static/js/vendor/katex.min.js \
-		runtime/web/static/js/vendor/katex.meta.json \
+		runtime/web/static/common/js/vendor/preact-htm.js \
+		runtime/web/static/common/js/vendor/preact-htm.meta.json \
+		runtime/web/static/common/js/marked.min.js \
+		runtime/web/static/common/js/marked.meta.json \
+		runtime/web/static/common/js/vendor/katex.min.js \
+		runtime/web/static/common/js/vendor/katex.meta.json \
 		runtime/web/src/styles/katex.bundle.css \
 		runtime/web/src/styles/katex.bundle.meta.json \
-		runtime/web/static/fonts/KaTeX_*.woff2 \
-		runtime/web/static/fonts/vendor/firacode-nerd-font-mono-regular.ttf \
-		runtime/web/static/fonts/vendor/firacode-nerd-font-mono-bold.ttf \
-		runtime/web/static/fonts/vendor/firacode-nerd-font.meta.json \
-		runtime/web/static/js/vendor/ghostty-web.js \
-		runtime/web/static/js/vendor/ghostty-vt.wasm \
-		runtime/web/static/js/vendor/ghostty-web.meta.json \
+		runtime/web/static/common/fonts/KaTeX_*.woff2 \
+		runtime/web/static/common/fonts/vendor/firacode-nerd-font-mono-regular.ttf \
+		runtime/web/static/common/fonts/vendor/firacode-nerd-font-mono-bold.ttf \
+		runtime/web/static/common/fonts/vendor/firacode-nerd-font.meta.json \
+		runtime/web/static/common/js/vendor/ghostty-web.js \
+		runtime/web/static/common/js/vendor/ghostty-vt.wasm \
+		runtime/web/static/common/js/vendor/ghostty-web.meta.json \
 		runtime/extensions/viewers/office-viewer/vendor/docx-preview.min.js \
 		runtime/extensions/viewers/office-viewer/vendor/xlsx.full.min.js \
 		runtime/extensions/viewers/office-viewer/vendor/PptxViewJS.min.js \
@@ -99,7 +98,7 @@ vendor: ## Build the checked-in vendored bundles + metadata
 
 update-mermaid-vendor: ## Rebuild or upgrade vendored mermaid (use MERMAID_VERSION=1.2.3 to upgrade)
 	cd runtime && bun run update:vendor:mermaid $(if $(MERMAID_VERSION),--version $(MERMAID_VERSION),)
-	@ls -lh runtime/web/static/js/vendor/beautiful-mermaid.js runtime/web/static/js/vendor/beautiful-mermaid.meta.json
+	@ls -lh runtime/web/static/common/js/vendor/beautiful-mermaid.js runtime/web/static/common/js/vendor/beautiful-mermaid.meta.json
 
 build-web: ## Build web JS/CSS bundles (+ sourcemaps) into static/classic/dist and static/common/dist
 	cd runtime && bun run build:web

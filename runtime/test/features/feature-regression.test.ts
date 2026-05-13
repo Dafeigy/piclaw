@@ -284,25 +284,25 @@ describe("feature: slash commands", () => {
 
 describe("feature: vendored libraries", () => {
   featureTest("marked.min.js", async () => {
-    const res = await fetchText(`${base()}/static/js/marked.min.js`);
+    const res = await fetchText(`${base()}/static/common/js/marked.min.js`);
     expect(res.status).toBe(200);
     expect(res.text.length).toBeGreaterThan(1000);
   });
 
   featureTest("katex.min.js", async () => {
-    const res = await fetchText(`${base()}/static/js/vendor/katex.min.js`);
+    const res = await fetchText(`${base()}/static/common/js/vendor/katex.min.js`);
     expect(res.status).toBe(200);
     expect(res.text.length).toBeGreaterThan(1000);
   });
 
   featureTest("beautiful-mermaid.js", async () => {
-    const res = await fetchText(`${base()}/static/js/vendor/beautiful-mermaid.js`);
+    const res = await fetchText(`${base()}/static/common/js/vendor/beautiful-mermaid.js`);
     expect(res.status).toBe(200);
     expect(res.text.length).toBeGreaterThan(1000);
   });
 
   featureTest("preact-htm.js", async () => {
-    const res = await fetchText(`${base()}/static/js/vendor/preact-htm.js`);
+    const res = await fetchText(`${base()}/static/common/js/vendor/preact-htm.js`);
     expect(res.status).toBe(200);
   });
 

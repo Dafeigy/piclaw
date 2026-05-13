@@ -278,7 +278,7 @@ async function main() {
             if (url.pathname === '/harness.js') {
                 return new Response(harnessBundle, { headers: { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-store' } });
             }
-            if (url.pathname === '/static/js/vendor/remote-display-decoder.wasm') {
+            if (url.pathname === '/static/common/js/vendor/remote-display-decoder.wasm') {
                 const wasmFile = Bun.file(paths.decoderWasm);
                 if (!(await wasmFile.exists())) {
                     return new Response('WASM decoder not found', { status: 404 });
