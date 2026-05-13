@@ -3,9 +3,10 @@ import { beforeEach, expect, test } from "bun:test";
 import "../helpers.js";
 import {
   estimateContextTokensFromSession,
+  maybeAutoCompactSessionBeforePrompt,
   runCompactionWithTimeout,
 } from "../../src/agent-pool/compaction.js";
-import { initDatabase } from "../../src/db.js";
+import { initDatabase, setChatCompactionBackoff } from "../../src/db.js";
 
 beforeEach(() => {
   initDatabase();
@@ -116,6 +117,55 @@ test("runCompactionWithTimeout keeps the single-flight lock until timed-out comp
   } finally {
     if (previousTimeout === undefined) delete process.env.PICLAW_COMPACTION_TIMEOUT_MS;
     else process.env.PICLAW_COMPACTION_TIMEOUT_MS = previousTimeout;
+  }
+});
+
+test("maybeAutoCompactSessionBeforePrompt suppresses retry after an expired non-cancellation failure", async () => {
+  const previousThreshold = process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+  process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = "75";
+  try {
+    const events: any[] = [];
+    const warnings: string[] = [];
+    let compactCalls = 0;
+    const chatJid = "web:previous-failure";
+    setChatCompactionBackoff(chatJid, {
+      chatJid,
+      failureCount: 1,
+      lastFailedAt: "2026-05-13T14:17:50.915Z",
+      backoffUntil: "2026-05-13T14:32:50.915Z",
+      lastErrorMessage: "Compaction timed out after 180s",
+    });
+    const session = {
+      ...makeSession([
+        { role: "user", content: [{ type: "text", text: "x".repeat(4000) }] },
+      ], 80_000),
+      model: { provider: "test", id: "large", contextWindow: 100_000 },
+      settingsManager: { getCompactionSettings: () => ({ enabled: true, reserveTokens: 25_000 }) },
+      isStreaming: false,
+      isCompacting: false,
+      isRetrying: false,
+      async compact() {
+        compactCalls += 1;
+      },
+    };
+
+    await maybeAutoCompactSessionBeforePrompt(
+      session as any,
+      chatJid,
+      { onWarn: (message) => warnings.push(message), onInfo: () => undefined },
+      (event) => events.push(event),
+    );
+
+    expect(compactCalls).toBe(0);
+    expect(warnings).toContain("Pre-prompt auto-compaction suppressed for chat after recent failures");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "compaction_suppressed",
+      reason: "previous_failure",
+      errorMessage: "Compaction timed out after 180s",
+    }));
+  } finally {
+    if (previousThreshold === undefined) delete process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+    else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
   }
 });
 

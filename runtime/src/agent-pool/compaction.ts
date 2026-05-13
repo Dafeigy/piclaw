@@ -383,6 +383,10 @@ async function maybeAutoCompactSession(
 
   try {
     const activeBackoff = getActiveCompactionBackoff(chatJid);
+    const previousBackoff = getChatCompactionBackoff(chatJid);
+    const previousNonCancellationFailure = previousBackoff && !isCompactionCancellationError(previousBackoff.lastErrorMessage)
+      ? previousBackoff
+      : null;
     if (activeBackoff && isCompactionCancellationError(activeBackoff.lastErrorMessage)) {
       clearCompactionFailureBackoff(chatJid);
       options.onWarn?.(
@@ -402,8 +406,11 @@ async function maybeAutoCompactSession(
           lastErrorMessage: activeBackoff.lastErrorMessage,
         },
       );
-    } else if (activeBackoff) {
-      const detail = formatCompactionBackoffDetail(activeBackoff);
+    } else if (activeBackoff || previousNonCancellationFailure) {
+      const suppressionState = activeBackoff ?? previousNonCancellationFailure!;
+      const detail = activeBackoff
+        ? formatCompactionBackoffDetail(suppressionState)
+        : `Previous auto-compaction failed at ${suppressionState.lastFailedAt}; emergency rotation should run before retrying. Last error: ${(suppressionState.lastErrorMessage ?? "unknown").slice(0, 160)}`;
       options.onWarn?.(
         reason === "idle"
           ? "Idle auto-compaction suppressed for chat after recent failures"
@@ -416,18 +423,18 @@ async function maybeAutoCompactSession(
           contextTokens: context.contextTokens,
           contextWindow: context.contextWindow,
           reserveTokens: context.reserveTokens,
-          failureCount: activeBackoff.failureCount,
-          backoffUntil: activeBackoff.backoffUntil,
-          lastErrorMessage: activeBackoff.lastErrorMessage,
+          failureCount: suppressionState.failureCount,
+          backoffUntil: suppressionState.backoffUntil,
+          lastErrorMessage: suppressionState.lastErrorMessage,
         },
       );
       onEvent?.({
         type: "compaction_suppressed",
-        reason: "backoff",
-        until: activeBackoff.backoffUntil,
-        failureCount: activeBackoff.failureCount,
+        reason: activeBackoff ? "backoff" : "previous_failure",
+        until: suppressionState.backoffUntil,
+        failureCount: suppressionState.failureCount,
         detail,
-        errorMessage: activeBackoff.lastErrorMessage ?? undefined,
+        errorMessage: suppressionState.lastErrorMessage ?? undefined,
       } as unknown as AgentSessionEvent);
       return;
     }
