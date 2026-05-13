@@ -108,6 +108,7 @@ type MessageRow = {
   timestamp: string;
   is_bot_message: number;
   content_blocks: string | null;
+  annotations: string | null;
 };
 
 type MessageResultRow = Omit<MessageRow, "content_blocks" | "annotations"> & {
