@@ -202,11 +202,13 @@ function AppContent() {
       <ActivityBar activePanel={activePanel.value} onPanelChange={handlePanelChange} />
       <main className="app-layout__main">
         <div className="app-layout__content-area">
-          <div className="app-layout__sidebar-wrapper" ref={sidebarWrapperRef}>
-            <Sidebar title={PANEL_NAMES[activePanel.value] || activePanel.value}>
-              <PanelRouter activePanel={activePanel.value} onPageSelect={handlePageSelect} />
-            </Sidebar>
-          </div>
+          {!isSettingsActive && (
+            <div className="app-layout__sidebar-wrapper" ref={sidebarWrapperRef}>
+              <Sidebar title={PANEL_NAMES[activePanel.value] || activePanel.value}>
+                <PanelRouter activePanel={activePanel.value} onPageSelect={handlePageSelect} />
+              </Sidebar>
+            </div>
+          )}
           {!sidebarCollapsed.value && !isSettingsActive && (
             <div
               className="app-layout__resize-handle"

@@ -159,7 +159,7 @@ export function SettingsPanel() {
             className={`settings-panel__nav-item${activeCategory.value === pane.id ? " settings-panel__nav-item--active" : ""}`}
             onClick={() => { activeCategory.value = pane.id; safeSetItem("piclaw-settings-category", pane.id); }}
           >
-            <span className="settings-panel__nav-icon">{pane.icon as never}</span>
+            <span className="settings-panel__nav-icon">{typeof pane.icon === "string" && pane.icon.trim().startsWith("<") ? <span dangerouslySetInnerHTML={{ __html: pane.icon }} /> : pane.icon as never}</span>
             <span>{pane.label}</span>
           </button>
         ))}
@@ -171,7 +171,7 @@ export function SettingsPanel() {
             className={`settings-panel__nav-item settings-panel__nav-item--addon${activeCategory.value === pane.id ? " settings-panel__nav-item--active" : ""}`}
             onClick={() => { activeCategory.value = pane.id; safeSetItem("piclaw-settings-category", pane.id); }}
           >
-            <span className="settings-panel__nav-icon">{pane.icon as never}</span>
+            <span className="settings-panel__nav-icon">{typeof pane.icon === "string" && pane.icon.trim().startsWith("<") ? <span dangerouslySetInnerHTML={{ __html: pane.icon }} /> : pane.icon as never}</span>
             <span>{pane.label}</span>
           </button>
         ))}

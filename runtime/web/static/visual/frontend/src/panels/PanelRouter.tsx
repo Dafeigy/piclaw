@@ -27,7 +27,7 @@ export function PanelRouter({ activePanel, onPageSelect }: PanelRouterProps) {
     case "scratchpad":
       return <ScratchpadPanel />;
     case "settings":
-      return <SettingsPanel />;
+      return null; // Settings rendered by App.tsx in the main panel area
     default:
       return <Placeholder text="Select a panel" />;
   }
