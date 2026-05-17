@@ -82,6 +82,7 @@ function FilePreview({ node, onMutate }: FilePreviewProps) {
       />
       <WorkspacePreview
         nodeName={node.name}
+        nodePath={node.path}
         preview={preview}
         status={status}
         errorMessage={errorMessage}

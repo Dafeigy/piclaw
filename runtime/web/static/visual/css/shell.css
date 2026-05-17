@@ -7178,3 +7178,22 @@ mark[data-highlight] { border-radius: 2px; padding: 0 1px; }
 .editor-frame__error button { margin-top: 12px; padding: 6px 16px; }
 .editor-frame__spinner { animation: pulse 1.5s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ── Preview edit button ─────────────────────────────────── */
+.workspace__preview-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-color, #2f3336);
+  border-radius: 6px;
+  background: var(--bg-secondary, #16181c);
+  color: var(--text-primary, #e7e9ea);
+  font-size: 12px;
+  cursor: pointer;
+}
+.workspace__preview-edit-btn:hover {
+  background: var(--bg-hover, #1d1f23);
+  border-color: var(--accent-color, #1d9bf0);
+}

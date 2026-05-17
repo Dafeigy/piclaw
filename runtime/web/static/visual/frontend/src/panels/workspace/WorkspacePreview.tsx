@@ -2,8 +2,15 @@ import type { WorkspaceFilePayload } from "../workspace-panel-helpers";
 import type { PreviewStatus } from "./useWorkspacePreview";
 import { renderMarkdown } from "../../utils/markdown-pipeline";
 
+function openInEditor(path: string, name: string) {
+  window.dispatchEvent(new CustomEvent('piclaw:open-page', {
+    detail: { path, name, mode: 'editor' },
+  }));
+}
+
 interface WorkspacePreviewProps {
   nodeName: string;
+  nodePath?: string;
   preview: WorkspaceFilePayload | null;
   status: PreviewStatus;
   errorMessage: string;
@@ -14,6 +21,7 @@ interface WorkspacePreviewProps {
 
 export function WorkspacePreview({
   nodeName,
+  nodePath,
   preview,
   status,
   errorMessage,
@@ -54,7 +62,17 @@ export function WorkspacePreview({
         </div>
       )}
       {status === "done" && kind === "code" && content !== null && (
-        <pre className="workspace__preview-code">{content}</pre>
+        <>
+          {nodePath && (
+            <button
+              className="workspace__preview-edit-btn"
+              onClick={() => openInEditor(nodePath, nodeName)}
+            >
+              <span className="codicon codicon-edit" /> Open in Editor
+            </button>
+          )}
+          <pre className="workspace__preview-code">{content}</pre>
+        </>
       )}
       {status === "done" && kind === "markdown" && content !== null && (
         <div
