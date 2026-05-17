@@ -11,19 +11,20 @@ const OPENABLE_EXTS = new Set([
   'mp4', 'webm', 'mov',
 ]);
 
-const EDITABLE_EXTS = new Set([
-  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
-  'json', 'jsonc', 'jsonl',
-  'yaml', 'yml', 'toml',
-  'txt', 'log', 'cfg', 'ini', 'env',
-  'sh', 'bash', 'zsh', 'fish',
-  'py', 'rb', 'lua', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'java', 'kt', 'swift',
-  'css', 'scss', 'less',
-  'xml', 'svg',
-  'sql',
-  'dockerfile', 'makefile',
-  'gitignore', 'gitattributes', 'editorconfig',
+const BINARY_EXTS = new Set([
+  'pdf', 'docx', 'xlsx', 'pptx',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'tiff',
+  'mp4', 'webm', 'mov', 'avi', 'mkv',
+  'mp3', 'wav', 'ogg', 'flac', 'aac',
+  'zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar',
+  'wasm', 'so', 'dll', 'exe', 'bin',
+  'ttf', 'woff', 'woff2', 'eot', 'otf',
 ]);
+
+/** Any file that isn't binary is editable. */
+function isEditableExt(ext: string): boolean {
+  return ext !== '' && !BINARY_EXTS.has(ext);
+}
 
 interface WorkspaceActionsProps {
   node: TreeNode;
@@ -119,7 +120,7 @@ export function WorkspaceActions({ node, downloadUrl, isDeleting, onDelete }: Wo
           <span className="codicon codicon-open-preview" />
         </button>
       )}
-      {EDITABLE_EXTS.has(ext) && (
+      {isEditableExt(ext) && (
         <button
           className="workspace__action-icon workspace__action-icon--edit"
           onClick={handleEditFile}

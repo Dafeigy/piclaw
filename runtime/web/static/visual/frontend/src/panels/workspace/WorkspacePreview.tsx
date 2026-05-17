@@ -61,18 +61,16 @@ export function WorkspacePreview({
           Binary file — cannot preview
         </div>
       )}
+      {status === "done" && kind !== "binary" && kind !== "image" && nodePath && (
+        <button
+          className="workspace__preview-edit-btn"
+          onClick={() => openInEditor(nodePath, nodeName)}
+        >
+          <span className="codicon codicon-edit" /> Open in Editor
+        </button>
+      )}
       {status === "done" && kind === "code" && content !== null && (
-        <>
-          {nodePath && (
-            <button
-              className="workspace__preview-edit-btn"
-              onClick={() => openInEditor(nodePath, nodeName)}
-            >
-              <span className="codicon codicon-edit" /> Open in Editor
-            </button>
-          )}
-          <pre className="workspace__preview-code">{content}</pre>
-        </>
+        <pre className="workspace__preview-code">{content}</pre>
       )}
       {status === "done" && kind === "markdown" && content !== null && (
         <div
