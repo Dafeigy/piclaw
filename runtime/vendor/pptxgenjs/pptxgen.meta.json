@@ -1,0 +1,11 @@
+{
+  "name": "pptxgenjs",
+  "version": "4.0.1",
+  "source": "https://www.npmjs.com/package/pptxgenjs",
+  "license": "MIT",
+  "format": "cjs",
+  "files": [
+    "pptxgen.cjs.js"
+  ],
+  "notes": "Vendored CJS bundle for server-side PowerPoint generation. Used by runtime/extensions/integrations/office-tools. Requires jszip at runtime (resolved from node_modules)."
+}
