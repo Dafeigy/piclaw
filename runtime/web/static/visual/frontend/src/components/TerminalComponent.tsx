@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { init, Terminal, FitAddon } from "ghostty-web";
 import type { ITheme } from "ghostty-web";
 
-
 import { createLogger } from "../utils/logger";
 const log = createLogger("terminal");
+
+
 // Catppuccin Mocha theme colors matching theme.ts dark theme
 const CATPPUCCIN_MOCHA_THEME: ITheme = {
   foreground: "#cdd6f4",
@@ -130,10 +131,10 @@ export function TerminalComponent() {
           const sessionInfo = await resp.json() as TerminalSessionInfo;
           wsPath = sessionInfo.ws_path || wsPath;
         } else {
-          log.warn(/terminal/session returned ${resp.status}, connecting directly`);
+          log.warn(`/terminal/session returned ${resp.status}, connecting directly`);
         }
       } catch (err) {
-        log.warn(failed to fetch session info, connecting directly:", err);
+        log.warn("failed to fetch session info, connecting directly:", err);
       }
 
       if (!mountedRef.current || !containerRef.current) return;
@@ -268,13 +269,13 @@ export function TerminalComponent() {
       retryTimerRef.current = setTimeout(() => {
         if (mountedRef.current) {
           setConnStatus("connecting");
-          setup().catch((err) => log.error(setup error:", err));
+          setup().catch((err) => log.error("setup error:", err));
         }
       }, delay);
     }
 
     setup().catch((err) => {
-      log.error(setup error:", err);
+      log.error("setup error:", err);
       if (mountedRef.current) {
         setConnStatus("error");
         setErrorMsg(`Failed to start terminal: ${String(err)}`);

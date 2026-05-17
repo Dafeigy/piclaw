@@ -4,9 +4,10 @@ import { buildChatUrl } from "../../api/chat-jid";
 import { normalizePost, mergeInteractions } from "./helpers";
 import type { Interaction, TimelineResponse } from "./types";
 
-
 import { createLogger } from "../../utils/logger";
 const log = createLogger("MessageList");
+
+
 interface UseTimelineFetchParams {
   setConnected: (v: boolean) => void;
   scrollToBottom: (force?: boolean) => void;
@@ -113,7 +114,7 @@ export function useTimelineFetch({
         });
       }
     } catch (err) {
-      log.warn(loadMore failed:", err);
+      log.warn("loadMore failed:", err);
       timelineError.value = "Failed to load older messages. Try again.";
     } finally {
       setLoadingMore(false);

@@ -12,9 +12,10 @@ import { useEffect, useRef } from "preact/hooks";
 import { getChatJid } from "../api/chat-jid";
 import { OverlayShell } from "./OverlayShell";
 
-
 import { createLogger } from "../utils/logger";
 const log = createLogger("AgentRequestModal");
+
+
 // Shield SVG — matches upstream status.ts:900–904
 const SHIELD_SVG = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -70,19 +71,19 @@ export function AgentRequestModal({ request, onClose }: AgentRequestModalProps) 
   useEffect(() => { firstBtnRef.current?.focus(); }, []);
 
   const handleDeny = async () => {
-    try { await callRespondToAgentRequest(request_id, "denied", chatJid); } catch (e) { log.error(Deny failed:", e); }
+    try { await callRespondToAgentRequest(request_id, "denied", chatJid); } catch (e) { log.error("Deny failed:", e); }
     onClose();
   };
   const handleAllow = async () => {
-    try { await callRespondToAgentRequest(request_id, "approved", chatJid); } catch (e) { log.error(Allow failed:", e); }
+    try { await callRespondToAgentRequest(request_id, "approved", chatJid); } catch (e) { log.error("Allow failed:", e); }
     onClose();
   };
   const handleAlwaysAllow = async () => {
-    try { await callAddToWhitelist(title, `Auto-approved: ${title}`); await callRespondToAgentRequest(request_id, "approved", chatJid); } catch (e) { log.error(Always Allow failed:", e); }
+    try { await callAddToWhitelist(title, `Auto-approved: ${title}`); await callRespondToAgentRequest(request_id, "approved", chatJid); } catch (e) { log.error("Always Allow failed:", e); }
     onClose();
   };
   const handleOptionResponse = async (outcome: string) => {
-    try { await callRespondToAgentRequest(request_id, outcome, chatJid); } catch (e) { log.error(Option response failed:", e); }
+    try { await callRespondToAgentRequest(request_id, outcome, chatJid); } catch (e) { log.error("Option response failed:", e); }
     onClose();
   };
 

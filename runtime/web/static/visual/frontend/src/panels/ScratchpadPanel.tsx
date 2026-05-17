@@ -3,9 +3,10 @@ import { useEffect, useRef } from "preact/hooks";
 import { getMessageUrl } from "../api/chat-jid";
 import { safeGetItem, safeSetItem, safeParseJSON } from "../utils/storage";
 
-
 import { createLogger } from "../utils/logger";
 const log = createLogger("scratchpad");
+
+
 interface ScratchItem {
   id: string;
   title: string;
@@ -104,7 +105,7 @@ export function ScratchpadPanel() {
         body: JSON.stringify({ content }),
       });
       if (!res.ok) {
-        log.warn(send failed:", res.status);
+        log.warn("send failed:", res.status);
         window.dispatchEvent(new CustomEvent("piclaw:status-flash", { detail: { message: "Failed to send note to chat", type: "error" } }));
         return;
       }
@@ -112,7 +113,7 @@ export function ScratchpadPanel() {
       const now = new Date().toISOString();
       persist(items.value.map(n => n.id === id ? { ...n, sentAt: now } : n));
     } catch (err) {
-      log.warn(send failed:", err);
+      log.warn("send failed:", err);
       window.dispatchEvent(new CustomEvent("piclaw:status-flash", { detail: { message: "Failed to send note to chat", type: "error" } }));
     }
   };

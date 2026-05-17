@@ -6,10 +6,11 @@ import { useSignal } from "@preact/signals";
 import { MessageList } from "../components/MessageList";
 import { safeGetItem, safeSetItem } from "../utils/storage";
 
-
-
 import { createLogger } from "../utils/logger";
 const log = createLogger("ChatPanel");
+
+
+
 interface ChatPanelProps {
   onOpenPalette?: () => void;
 }

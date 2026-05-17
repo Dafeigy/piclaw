@@ -7,9 +7,10 @@ import { addonHealthSignal } from "./addonHealthSignal";
 import { providerConfigured } from "../../app/providerState";
 import { safeGetItem, safeSetItem } from "../../utils/storage";
 
-
 import { createLogger } from "../../utils/logger";
 const log = createLogger("ModelContextBar");
+
+
 export interface UseStatusPollingResult {
   agentStatus: ReturnType<typeof useSignal<AgentStatus | null>>;
   agentContext: ReturnType<typeof useSignal<AgentContext | null>>;
@@ -120,7 +121,7 @@ export function useStatusPolling(): UseStatusPollingResult {
       pollTick.value += 1;
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      log.warn(status fetch failed:", err);
+      log.warn("status fetch failed:", err);
       error.value = true;
       pollTick.value += 1;
     } finally {
@@ -155,7 +156,7 @@ export function useStatusPolling(): UseStatusPollingResult {
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      log.warn(context fetch failed:", err);
+      log.warn("context fetch failed:", err);
     } finally {
       isFetchingContext.current = false;
     }

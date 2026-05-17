@@ -2,9 +2,10 @@ import { getMessageUrl } from "../../api/chat-jid";
 import { type Provider, type SettingsSectionProps } from "./types";
 import { registerSettingsPane } from "./pane-registry";
 
-
 import { createLogger } from "../../utils/logger";
 const log = createLogger("providers");
+
+
 export function ProvidersSection({ providers }: { providers: Provider[] }) {
   const sendCommand = async (command: string) => {
     try {
@@ -15,11 +16,11 @@ export function ProvidersSection({ providers }: { providers: Provider[] }) {
         body: JSON.stringify({ content: command }),
       });
       if (!res.ok) {
-        log.warn(command failed:", res.status);
+        log.warn("command failed:", res.status);
         window.dispatchEvent(new CustomEvent("piclaw:status-flash", { detail: { message: "Provider action failed", type: "error" } }));
       }
     } catch (err) {
-      log.warn(command failed:", err);
+      log.warn("command failed:", err);
       window.dispatchEvent(new CustomEvent("piclaw:status-flash", { detail: { message: "Provider action failed", type: "error" } }));
     }
   };

@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from "preact/hooks";
 import { useComputed } from "@preact/signals";
 import { addonHealthSignal } from "../components/model-context-bar/addonHealthSignal";
 
-
 import { createLogger } from "../utils/logger";
 const log = createLogger("addons");
+
+
 interface AddonSkill {
   name: string;
 }
@@ -86,14 +87,14 @@ export function AddonsPanel() {
         body: JSON.stringify({ slug }),
       });
       if (!res.ok) {
-        log.warn(install failed:", res.status);
+        log.warn("install failed:", res.status);
         setActionError("Couldn't install add-on. Please try again.");
         return;
       }
       setNeedsRestart(true);
       await loadAddons();
     } catch (err) {
-      log.warn(install failed:", err);
+      log.warn("install failed:", err);
       setActionError("Install failed.");
     } finally {
       setActionState((prev) => {
@@ -115,14 +116,14 @@ export function AddonsPanel() {
         body: JSON.stringify({ slug }),
       });
       if (!res.ok) {
-        log.warn(uninstall failed:", res.status);
+        log.warn("uninstall failed:", res.status);
         setActionError("Couldn't uninstall add-on. Please try again.");
         return;
       }
       setNeedsRestart(true);
       await loadAddons();
     } catch (err) {
-      log.warn(uninstall failed:", err);
+      log.warn("uninstall failed:", err);
       setActionError("Uninstall failed.");
     } finally {
       setActionState((prev) => {

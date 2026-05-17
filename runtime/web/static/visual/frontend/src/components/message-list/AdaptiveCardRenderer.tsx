@@ -8,9 +8,10 @@
 import { useEffect, useRef, useMemo } from "preact/hooks";
 import type { ContentBlock } from "./types";
 
-
 import { createLogger } from "../../utils/logger";
 const log = createLogger("AdaptiveCard");
+
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface AdaptiveCardBlock {
@@ -142,7 +143,7 @@ async function renderCard(
   try {
     await ensureSdk();
   } catch (err) {
-    log.error(SDK load failed:", err);
+    log.error("SDK load failed", err);
     const el = document.createElement("div");
     el.className = "adaptive-card-fallback";
     el.textContent = block.fallback_text ?? "Card could not be rendered (SDK unavailable).";
@@ -151,7 +152,7 @@ async function renderCard(
   }
 
   if (!SUPPORTED_VERSIONS.has(block.schema_version)) {
-    log.warn(Unsupported schema version ${block.schema_version}`);
+    log.warn(`Unsupported schema version ${block.schema_version}`);
     const el = document.createElement("div");
     el.className = "adaptive-card-fallback";
     el.textContent = block.fallback_text ?? `Unsupported card version: ${block.schema_version}`;
@@ -210,12 +211,12 @@ async function renderCard(
             action: { type, title, data },
           }),
         })
-          .catch((err) => log.error(Submit failed:", err))
+          .catch((err) => log.error("Submit failed:", err))
           .finally(() => cardEl.classList.remove("adaptive-card-busy"));
         return;
       }
 
-      log.warn(Unsupported action:", type);
+      log.warn("Unsupported action:", type);
     };
 
     const rendered = card.render();
@@ -255,7 +256,7 @@ async function renderCard(
 
     cardEl.appendChild(rendered);
   } catch (err) {
-    log.error(Render error:", err);
+    log.error("Render error:", err);
     const el = document.createElement("div");
     el.className = "adaptive-card-fallback";
     el.textContent = block.fallback_text ?? "Card failed to render.";

@@ -4,14 +4,14 @@ import { useDialog } from "../hooks/useDialog";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 import {
   chatName,
-
-import { createLogger } from "../utils/logger";
-const log = createLogger("session-pill");
   extractChatJidFromAction,
   loadMergedSessions,
   sanitizeSessionName,
   type SessionEntry,
 } from "../utils/session";
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("session-pill");
 
 function statusTone(entry: SessionEntry, activeChatJid: string): "current" | "active" | "inactive" | "archived" {
   const isCurrent = entry.jid === activeChatJid;
@@ -43,7 +43,7 @@ export function SessionPill() {
       setSessions(mergedSessions);
       setStatus("idle");
     } catch (err) {
-      log.warn(failed to load sessions:", err);
+      log.warn("failed to load sessions:", err);
       setStatus("error");
     }
   }, [activeChatJid]);
@@ -91,7 +91,7 @@ export function SessionPill() {
         goToChat(nextChatJid);
       }
     } catch (err) {
-      log.warn(${actionKey} failed:`, err);
+      log.warn(`${actionKey} failed`, err);
     } finally {
       setActionBusy(null);
       setIsOpen(false);

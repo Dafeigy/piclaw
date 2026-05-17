@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { commandRegistry } from "../../services";
 import type { BackendCommand, MergedCommand } from "./types";
 
-
 import { createLogger } from "../../utils/logger";
 const log = createLogger("CommandPalette");
+
+
 /**
  * Fetches backend commands when the palette opens and merges them with the
  * local command registry. Returns the merged list.
@@ -27,7 +28,7 @@ export function useCommandFetch(visible: boolean): MergedCommand[] {
       })
       .catch((err) => {
         if (err.name === "AbortError") return;
-        log.warn(Failed to fetch backend commands:", err);
+        log.warn("Failed to fetch backend commands:", err);
         setBackendCommands([]);
       });
 

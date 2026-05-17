@@ -4,9 +4,10 @@ import { buildChatUrl } from "../../api/chat-jid";
 import { normalizePost } from "./helpers";
 import type { Interaction } from "./types";
 
-
 import { createLogger } from "../../utils/logger";
 const log = createLogger("MessageList");
+
+
 interface UseTimelineStreamParams {
   setMessages: (fn: (prev: Interaction[]) => Interaction[]) => void;
   setDraft: (v: string | ((prev: string) => string)) => void;
@@ -56,7 +57,7 @@ export function useTimelineStream({
         }
         scrollToBottom(true);
       } catch (err) {
-        log.warn(SSE parse error:", err);
+        log.warn("SSE parse error", err);
       }
     });
 
@@ -71,7 +72,7 @@ export function useTimelineStream({
         window.dispatchEvent(new CustomEvent("piclaw:agent-draft", { detail: { delta: parsed.delta, text: parsed.text } }));
         scrollToBottom();
       } catch (err) {
-        log.warn(SSE parse error:", err);
+        log.warn("SSE parse error:", err);
       }
     });
 
@@ -83,7 +84,7 @@ export function useTimelineStream({
         window.dispatchEvent(new CustomEvent("piclaw:agent-draft", { detail: { text } }));
         scrollToBottom();
       } catch (err) {
-        log.warn(SSE parse error:", err);
+        log.warn("SSE parse error:", err);
       }
     });
 
@@ -92,7 +93,7 @@ export function useTimelineStream({
         const parsed = JSON.parse(e.data);
         window.dispatchEvent(new CustomEvent("piclaw:agent-thought", { detail: { delta: parsed.delta, text: parsed.text } }));
       } catch (err) {
-        log.warn(SSE thought parse error:", err);
+        log.warn("SSE thought parse error:", err);
       }
     });
 
@@ -102,7 +103,7 @@ export function useTimelineStream({
         const text = parsed.text ?? parsed.content ?? "";
         window.dispatchEvent(new CustomEvent("piclaw:agent-thought", { detail: { text } }));
       } catch (err) {
-        log.warn(SSE thought parse error:", err);
+        log.warn("SSE thought parse error:", err);
       }
     });
 
@@ -124,7 +125,7 @@ export function useTimelineStream({
           new CustomEvent("piclaw:agent-status", { detail: { type: "done" } })
         );
       } catch (err) {
-        log.warn(SSE parse error:", err);
+        log.warn("SSE parse error:", err);
         setDraft("");
         scrollToBottom(true);
         window.dispatchEvent(new CustomEvent("piclaw:agent-turn-end"));
@@ -142,7 +143,7 @@ export function useTimelineStream({
           window.dispatchEvent(new CustomEvent("piclaw:extension-panel", { detail: data }));
         }
       } catch (err) {
-        log.warn(SSE extension_ui_widget parse error:", err);
+        log.warn("SSE extension_ui_widget parse error:", err);
       }
     });
 
@@ -152,7 +153,7 @@ export function useTimelineStream({
         // Relay approval/custom UI requests so AgentStatusPanel can show the modal
         window.dispatchEvent(new CustomEvent("piclaw:agent-request", { detail: data }));
       } catch (err) {
-        log.warn(SSE extension_ui_request parse error:", err);
+        log.warn("SSE extension_ui_request parse error:", err);
       }
     });
 
@@ -163,7 +164,7 @@ export function useTimelineStream({
           new CustomEvent("piclaw:agent-status", { detail: data })
         );
       } catch (err) {
-        log.warn(SSE parse error:", err);
+        log.warn("SSE parse error:", err);
       }
     });
 
@@ -172,7 +173,7 @@ export function useTimelineStream({
         const data = JSON.parse(e.data);
         window.dispatchEvent(new CustomEvent("piclaw:widget-open", { detail: data }));
       } catch (err) {
-        log.warn(SSE widget parse error:", err);
+        log.warn("SSE widget parse error:", err);
       }
     });
 
@@ -181,7 +182,7 @@ export function useTimelineStream({
         const data = JSON.parse(e.data);
         window.dispatchEvent(new CustomEvent("piclaw:widget-delta", { detail: data }));
       } catch (err) {
-        log.warn(SSE widget parse error:", err);
+        log.warn("SSE widget parse error:", err);
       }
     });
 
@@ -190,7 +191,7 @@ export function useTimelineStream({
         const data = JSON.parse(e.data);
         window.dispatchEvent(new CustomEvent("piclaw:widget-final", { detail: data }));
       } catch (err) {
-        log.warn(SSE widget parse error:", err);
+        log.warn("SSE widget parse error:", err);
       }
     });
 
@@ -198,7 +199,7 @@ export function useTimelineStream({
       try {
         window.dispatchEvent(new CustomEvent("piclaw:widget-close", { detail: JSON.parse(e.data) }));
       } catch (err) {
-        log.warn(SSE widget parse error:", err);
+        log.warn("SSE widget parse error:", err);
       }
     });
 
@@ -206,7 +207,7 @@ export function useTimelineStream({
       try {
         window.dispatchEvent(new CustomEvent("piclaw:widget-error", { detail: JSON.parse(e.data) }));
       } catch (err) {
-        log.warn(SSE widget parse error:", err);
+        log.warn("SSE widget parse error:", err);
       }
     });
 
@@ -239,7 +240,7 @@ export function useTimelineStream({
 
       // Reconnection — merge new messages
       refetchTimelineOnReconnect().catch((err) => {
-        log.warn(reconnect refresh failed:", err);
+        log.warn("reconnect refresh failed:", err);
         timelineError.value =
           "Timeline may be stale. Click to refresh.";
       });

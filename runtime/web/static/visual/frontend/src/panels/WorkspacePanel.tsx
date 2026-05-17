@@ -8,14 +8,14 @@ import { WorkspaceActions } from "./workspace/WorkspaceActions";
 import { WorkspacePreview } from "./workspace/WorkspacePreview";
 import {
   readJsonSafely,
-
-import { createLogger } from "../utils/logger";
-const log = createLogger("WorkspacePanel");
   toUserFacingMessage,
   getErrorMessage,
   type WorkspaceMutationPayload,
 } from "./workspace/workspaceUtils";
 import { useDialog } from "../hooks/useDialog";
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("WorkspacePanel");
 
 // ─── FilePreview ──────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ function FilePreview({ node, onMutate }: FilePreviewProps) {
       }
       onMutate({ nextNode: null });
     } catch (error) {
-      log.error(Failed to delete file:", error);
+      log.error("Failed to delete file:", error);
       await showAlert({
         title: "Failed to delete file",
         description: toUserFacingMessage(error, "Failed to delete file"),

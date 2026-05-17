@@ -2,9 +2,6 @@ import { useState, useCallback, useRef, useEffect } from "preact/hooks";
 import type { TreeNode } from "../../components/FileTree";
 import {
   buildFolderChartSegments,
-
-import { createLogger } from "../../utils/logger";
-const log = createLogger("WorkspacePanel");
   DOT_COLORS,
   type ChildInfo,
   type FolderChartSegment,
@@ -18,6 +15,9 @@ import {
   type WorkspaceMutationPayload,
 } from "./workspaceUtils";
 import { useDialog } from "../../hooks/useDialog";
+
+import { createLogger } from "../../utils/logger";
+const log = createLogger("WorkspacePanel");
 
 // ─── Sunburst helpers ─────────────────────────────────────────────────────────
 
@@ -323,7 +323,7 @@ export function FolderPreview({ node, onMutate }: FolderPreviewProps) {
       }
       onMutate({ nextNode: makeTreeNodeFromMutation("file", data ?? {}) });
     } catch (error) {
-      log.error(Failed to create file:", error);
+      log.error("Failed to create file:", error);
       await showAlert({
         title: "Failed to create file",
         description: toUserFacingMessage(error, "Failed to create file"),
@@ -358,7 +358,7 @@ export function FolderPreview({ node, onMutate }: FolderPreviewProps) {
         onMutate({ nextNode: lastUploadedNode });
       }
     } catch (error) {
-      log.error(Failed to upload file:", error);
+      log.error("Failed to upload file:", error);
       await showAlert({
         title: "Failed to upload file",
         description: toUserFacingMessage(error, "Failed to upload file"),
