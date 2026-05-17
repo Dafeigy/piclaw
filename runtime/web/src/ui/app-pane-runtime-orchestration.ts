@@ -1188,6 +1188,9 @@ export function usePaneRuntimeOrchestration(options: UsePaneRuntimeOrchestration
       const nextMtime = typeof payload?.mtime === 'string' && payload.mtime.trim()
         ? payload.mtime.trim()
         : new Date().toISOString();
+      // Skip if the mtime matches what the editor already has — this is our own save
+      const currentMtime = typeof instance.getCurrentMtime === 'function' ? instance.getCurrentMtime() : null;
+      if (currentMtime && currentMtime === nextMtime) return;
       instance.setContent(nextText, nextMtime);
     } catch (error) {
       console.warn('[workspace_update] Failed to refresh active pane:', error);

@@ -1140,6 +1140,10 @@ export class StandaloneEditorInstance implements PaneInstance {
         return this.dirty;
     }
 
+    getCurrentMtime(): string | null {
+        return this.currentMtime;
+    }
+
     setContent(content: string, mtime: string): void {
         if (!this.view) {
             this.mountEditor(content, mtime);
