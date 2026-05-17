@@ -1180,7 +1180,9 @@ export class StandaloneEditorInstance implements PaneInstance {
                     this.viewStateChangeCb({ ...viewState, content: this.view.state.doc.toString() });
                 }
             }
-        } catch { /* best-effort — don't block dispose */ }
+        } catch (err) {
+            console.debug('[editor] Failed to flush view state during dispose:', err);
+        }
         this.disposed = true;
         this.conflictMonitor?.dispose();
         this.clearDirtyRecheckTimer();
