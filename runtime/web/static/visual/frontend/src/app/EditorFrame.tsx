@@ -39,89 +39,62 @@ export function EditorFrame({ filePath, onBack }: EditorFrameProps) {
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    if (!containerRef.current || !filePath) return;
     let disposed = false;
 
-    (async () => {
-      try {
-        setStatus("loading");
-        const mod = await loadEditorBundle();
-        if (disposed) return;
+    // Wait for next frame so containerRef is attached
+    requestAnimationFrame(() => {
+      if (disposed || !containerRef.current || !filePath) return;
 
-        const EditorClass =
-          mod.StandaloneEditorInstance || mod.default?.StandaloneEditorInstance || mod.default;
-        if (!EditorClass) {
-          throw new Error("editor.bundle.js does not export StandaloneEditorInstance");
+      (async () => {
+        try {
+          setStatus("loading");
+          const mod = await loadEditorBundle();
+          if (disposed || !containerRef.current) return;
+
+          const EditorClass = mod.StandaloneEditorInstance || mod.default?.StandaloneEditorInstance;
+          if (!EditorClass) {
+            throw new Error("editor.bundle.js does not export StandaloneEditorInstance");
+          }
+
+          containerRef.current.innerHTML = "";
+
+          const instance = new EditorClass(containerRef.current, {
+            path: filePath,
+            content: null,
+            mtime: null,
+            workspaceBaseUrl: "/workspace",
+            onDirtyChange: () => {},
+            onSaveRequest: () => {},
+            onClose: () => { onBack?.(); },
+          });
+
+          instanceRef.current = instance;
+          if (!disposed) setStatus("ready");
+        } catch (err) {
+          if (disposed) return;
+          log.error("Failed to load editor", err);
+          setStatus("error");
+          setErrorMsg(err instanceof Error ? err.message : String(err));
         }
-
-        const container = containerRef.current!;
-        container.innerHTML = "";
-
-        const instance = new EditorClass(container, {
-          path: filePath,
-          content: null,
-          mtime: null,
-          workspaceBaseUrl: "/workspace",
-          onDirtyChange: (dirty: boolean) => {
-            log.info(`dirty: ${dirty}`);
-          },
-          onSaveRequest: () => {
-            log.info("save requested");
-          },
-          onClose: () => {
-            onBack?.();
-          },
-        });
-
-        instanceRef.current = instance;
-        setStatus("ready");
-      } catch (err) {
-        if (disposed) return;
-        log.error("Failed to load editor", err);
-        setStatus("error");
-        setErrorMsg(err instanceof Error ? err.message : String(err));
-      }
-    })();
+      })();
+    });
 
     return () => {
       disposed = true;
       if (instanceRef.current?.dispose) {
-        try {
-          instanceRef.current.dispose();
-        } catch {
-          /* ignore dispose errors */
-        }
+        try { instanceRef.current.dispose(); } catch { /* ignore */ }
       }
       instanceRef.current = null;
     };
   }, [filePath]);
 
-  if (status === "loading") {
-    return (
-      <div className="editor-frame editor-frame--loading">
-        <div className="editor-frame__spinner">Loading editor…</div>
-      </div>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <div className="editor-frame editor-frame--error">
-        <div className="editor-frame__error">
-          <p>Failed to load editor: {errorMsg}</p>
-          <button onClick={onBack}>Back</button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="editor-frame editor-frame--ready">
+    <div className={`editor-frame editor-frame--${status}`}>
       <div className="editor-frame__header">
-        <button className="editor-frame__back" onClick={onBack} title="Back">
-          ←
-        </button>
+        <button className="editor-frame__back" onClick={onBack} title="Back">←</button>
         <span className="editor-frame__path">{filePath}</span>
+        {status === "loading" && <span className="editor-frame__spinner">Loading editor…</span>}
+        {status === "error" && <span className="editor-frame__error-inline">{errorMsg}</span>}
       </div>
       <div className="editor-frame__container" ref={containerRef} />
     </div>
