@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import "../helpers.js";
 import { createFakeExtensionApi } from "./fake-extension-api.js";
 import { imageProcessing } from "../../src/extensions/image-processing.js";
-import officeToolsToolExtension from "../../extensions/integrations/office-tools-tool/index.ts";
 import bunRunnerExtension from "../../extensions/integrations/bun-runner/index.ts";
 
 function createUiRecorder() {
@@ -45,27 +44,8 @@ describe("Pi 0.68.0 built-in and packaged adoption", () => {
     expect(ui.indicators[ui.indicators.length - 1]).toEqual({ frames: [] });
   });
 
-  test("office_read and office_write clear working indicator on early validation failures", async () => {
-    const fake = createFakeExtensionApi();
-    officeToolsToolExtension(fake.api);
-    const reader = fake.tools.get("office_read");
-    const writer = fake.tools.get("office_write");
-    if (!reader || !writer) throw new Error("office tools not registered");
+  // office-tools tests removed: office_read/office_write now shipped as @rcarmo/piclaw-addon-office-tools
 
-    const readUi = createUiRecorder();
-    const readResult = await reader.execute("office-read", { path: "missing.docx" }, undefined, undefined, { cwd: process.env.PICLAW_WORKSPACE, ...readUi.ctx });
-    expect(readResult.details.ok).toBe(false);
-    expect(readUi.messages[0]).toBe("Office: reading missing.docx…");
-    expect(readUi.messages[readUi.messages.length - 1]).toBeUndefined();
-    expect(readUi.indicators[readUi.indicators.length - 1]).toEqual({ frames: [] });
-
-    const writeUi = createUiRecorder();
-    const writeResult = await writer.execute("office-write", { path: "bad.txt", markdown: "hello" }, undefined, undefined, { cwd: process.env.PICLAW_WORKSPACE, ...writeUi.ctx });
-    expect(writeResult.details.ok).toBe(false);
-    expect(writeUi.messages[0]).toBe("Office: writing bad.txt…");
-    expect(writeUi.messages[writeUi.messages.length - 1]).toBeUndefined();
-    expect(writeUi.indicators[writeUi.indicators.length - 1]).toEqual({ frames: [] });
-  });
 
   test("bun-runner remains a dedicated packaged integration and stays separate from bash", () => {
     const fake = createFakeExtensionApi();
