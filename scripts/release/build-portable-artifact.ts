@@ -293,14 +293,14 @@ install_bundle() {
 
   if [ "\${PICLAW_SKIP_BIN_LINK:-0}" != "1" ]; then
     mkdir -p "$bin_dir"
-    cat > "$bin_dir/piclaw" <<EOF
+    cat > "$bin_dir/piclaw" <<LAUNCHER
 #!/usr/bin/env sh
-exec "$prefix/current/bin/piclaw" "\$@"
-EOF
-    cat > "$bin_dir/pi" <<EOF
+exec "$prefix/current/bin/piclaw" "\\$@"
+LAUNCHER
+    cat > "$bin_dir/pi" <<LAUNCHER
 #!/usr/bin/env sh
-exec "$prefix/current/bin/pi" "\$@"
-EOF
+exec "$prefix/current/bin/pi" "\\$@"
+LAUNCHER
     chmod 755 "$bin_dir/piclaw" "$bin_dir/pi"
   fi
 
