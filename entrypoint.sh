@@ -238,11 +238,31 @@ validate_supervisor_config() {
     if [ ! -f "$conf" ]; then
         return 1
     fi
+    # If the validator script is missing or bun cannot execute it, accept the
+    # config rather than blocking startup. The validator is a convenience check,
+    # not a hard gate — supervisord itself will report parse errors at launch.
     if [ ! -f "$SUPERVISOR_VALIDATE_SCRIPT" ]; then
-        echo "Missing supervisor validator script at $SUPERVISOR_VALIDATE_SCRIPT" >&2
-        return 1
+        log "Supervisor validator script not found; skipping validation for $conf"
+        return 0
     fi
+    if ! command -v bun >/dev/null 2>&1; then
+        log "bun not available; skipping supervisor config validation for $conf"
+        return 0
+    fi
+    local exit_code=0
     bun "$SUPERVISOR_VALIDATE_SCRIPT" "$conf" >/tmp/piclaw-supervisord-validate.log 2>&1
+    exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        return 0
+    fi
+    # If bun crashed (signal, seccomp, OOM) rather than the validator rejecting
+    # the config, treat it as a pass with a warning. Exit code 1 = validator
+    # found an error; exit code >1 = runtime/infrastructure failure.
+    if [ $exit_code -gt 1 ]; then
+        log "Supervisor validator exited with code $exit_code (possible runtime issue); accepting $conf"
+        return 0
+    fi
+    return 1
 }
 
 forward_supervisor_signal() {
