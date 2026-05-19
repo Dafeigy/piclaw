@@ -5146,6 +5146,16 @@ pre.frontmatter-block {
 .code-block pre {
   margin: 0;
   border-radius: 0 0 6px 6px;
+  min-height: 1.5em;
+  overflow-x: auto;
+}
+.code-block pre code {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: var(--text-primary, #e7e9ea);
+}
   border-top: none;
 }
 
