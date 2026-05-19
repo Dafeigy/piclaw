@@ -815,6 +815,46 @@ describe("smart-compaction", () => {
       expect(prompts.at(-1)).toContain("Ordered Intermediate Summaries");
     });
 
+    it("uses progressive chunks when sandbox provider prompt limits are lower than reported context", async () => {
+      const hugeShortConversation = Array.from({ length: 8 }, (_, i) =>
+        userMsg(`Sandbox-capped short-session fact ${i}: ${"z".repeat(140_000)}`),
+      );
+
+      (completeSimple as any).mockImplementation(async (_model: any, context: any) => {
+        const prompt = context.messages[0].content[0].text as string;
+        if (prompt.includes("deterministic chunk")) {
+          const range = prompt.match(/Message index range: ([0-9-]+)/)?.[1] ?? "unknown";
+          return {
+            content: [{ type: "text", text: `## Chunk Range\n- ${range}\n\n## Goals / User Intent\n- Preserve sandbox-capped chunk ${range}\n\n## Constraints & Preferences\n- none\n\n## Decisions\n- none\n\n## Files / Commands / Tool Outcomes\n- none\n\n## Progress\n- Done: chunk summarized\n- In progress: final merge\n- Blocked: none\n\n## Open Questions / Next Steps\n- merge\n\n## Key Continuity Facts\n- Sandbox-capped fact in ${range}` }],
+            stopReason: "end",
+          };
+        }
+        return {
+          content: [{ type: "text", text: "## Goal\nProgressive sandbox-capped final goal\n\n## Current Active Topic\n- sandbox prompt cap\n\n## Historical / Background Context\n- provider rejected full-pass summarization above 272000 prompt tokens even though the model reported a larger context window\n\n## Constraints & Preferences\n- preserve facts\n\n## Progress\n### Done\n- [x] chunks summarized\n\n### In Progress\n- [ ] final validation\n\n### Blocked\n- none\n\n## Key Decisions\n- **Progressive mode**: absolute full-pass cap overrides reported context\n\n## Next Steps\n1. validate\n\n## Critical Context\n- Sandbox-capped short-session fact 0\n- Sandbox-capped short-session fact 7" }],
+          stopReason: "end",
+        };
+      });
+
+      const result = await handler!(
+        {
+          preparation: makePreparation(hugeShortConversation.length, {
+            messagesToSummarize: hugeShortConversation,
+            tokensBefore: 291_607,
+            settings: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1000 },
+          }),
+          branchEntries: [],
+          signal: new AbortController().signal,
+        },
+        makeCtx({ model: { provider: "github-copilot", id: "sandbox-large-context", contextWindow: 1_000_000, reasoning: false } }),
+      );
+
+      expect(result.compaction.summary).toContain("Progressive sandbox-capped final goal");
+      expect((completeSimple as any).mock.calls.length).toBeGreaterThan(1);
+      const prompts = (completeSimple as any).mock.calls.map((call: any[]) => call[1].messages[0].content[0].text as string);
+      expect(prompts.some((prompt: string) => prompt.includes("deterministic chunk"))).toBe(true);
+      expect(prompts.at(-1)).toContain("Ordered Intermediate Summaries");
+    });
+
     it("aborts progressive mode when merge passes make no reduction (loop guard)", async () => {
       const longMessages: any[] = [];
       for (let i = 0; i < 80; i++) {

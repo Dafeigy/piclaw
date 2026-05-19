@@ -49,6 +49,14 @@ export const USER_PREVIEW_MAX_CHARS = 300;
 /** Minimum acceptable summary length (chars). */
 export const MIN_SUMMARY_CHARS = 100;
 
+/**
+ * Absolute prompt-token ceiling for falling through to the upstream full-pass
+ * compactor. Some provider sandboxes advertise very large model context windows
+ * but enforce lower prompt-token limits for summarization requests; above this
+ * ceiling, use Piclaw progressive chunking instead of risking a full-pass 400.
+ */
+export const FULL_PASS_FALLBACK_MAX_PROMPT_TOKENS = parsePositiveEnvInt("PICLAW_FULL_PASS_COMPACTION_MAX_PROMPT_TOKENS") ?? 200_000;
+
 /** Conservative fallback context window for models that do not publish one. */
 export const PROGRESSIVE_FALLBACK_CONTEXT_WINDOW = getUnknownModelContextWindow();
 

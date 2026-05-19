@@ -15,7 +15,7 @@ import { resolveModelRequestAuth } from "../utils/model-auth.js";
 import { createLogger } from "../utils/logger.js";
 import { applyTokenEstimateSafetyMultiplier, getEffectiveContextWindow } from "../utils/context-window-budget.js";
 
-import { MIN_COMPACTION_OUTPUT_TOKENS, MIN_SUMMARY_CHARS, PROGRESSIVE_FALLBACK_CONTEXT_WINDOW, SELECTIVE_THRESHOLD, SYSTEM_PROMPT_OVERHEAD_TOKENS } from "./smart-compaction/config.js";
+import { FULL_PASS_FALLBACK_MAX_PROMPT_TOKENS, MIN_COMPACTION_OUTPUT_TOKENS, MIN_SUMMARY_CHARS, PROGRESSIVE_FALLBACK_CONTEXT_WINDOW, SELECTIVE_THRESHOLD, SYSTEM_PROMPT_OVERHEAD_TOKENS } from "./smart-compaction/config.js";
 import { estimateCompactionPromptTokens, estimateTokensFromChars, getContextWindowEstimate, publishContextEstimate } from "./smart-compaction/context.js";
 import { compressFilePaths, fileListsFromOps } from "./smart-compaction/files.js";
 import { convertMessagesWithMetadata, type SourceMessage } from "./smart-compaction/messages.js";
@@ -352,7 +352,10 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
       // prompt has room for system overhead plus a minimal summary response;
       // otherwise keep going into selective/progressive chunking.
       const fullPassPromptEstimate = estimateFullPassFallbackPromptTokens(llmMessages, tokensBefore);
-      const conservativeFullPassLimit = Math.floor(contextWindow * FULL_PASS_FALLBACK_CONTEXT_FRACTION);
+      const conservativeFullPassLimit = Math.min(
+        Math.floor(contextWindow * FULL_PASS_FALLBACK_CONTEXT_FRACTION),
+        FULL_PASS_FALLBACK_MAX_PROMPT_TOKENS,
+      );
       const fullPassFallbackAllowed = fullPassPromptEstimate + MIN_COMPACTION_OUTPUT_TOKENS <= conservativeFullPassLimit && !targetContext.targetContextWindow;
       if (messagesToSummarize.length < SELECTIVE_THRESHOLD && fullPassFallbackAllowed) {
         publishContextEstimate(ctx, tokensBefore, "builtin_fallback");
