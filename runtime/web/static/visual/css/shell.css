@@ -5626,6 +5626,9 @@ pre.frontmatter-block {
   margin: 0;
   border-top: 1px solid var(--border);
   line-height: 1.4;
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .agent-status-card__content ol,
 .agent-status-card__content ul {
@@ -7218,9 +7221,4 @@ mark[data-highlight] { border-radius: 2px; padding: 0 1px; }
   transform: rotate(90deg);
 }
 
-/* ── Tools panel max-height (#622) ──────────────────────── */
-.agent-status-card__content {
-  max-height: 200px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
+
