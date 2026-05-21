@@ -2,18 +2,15 @@
  * router.ts – Message routing and formatting for the agent pipeline.
  *
  * Responsible for:
- *   - Detecting the channel type (web, whatsapp) from a chat JID.
+ *   - Detecting the channel type from a chat JID (extensible via registerChannelDetector).
  *   - Formatting arrays of NewMessage objects into a compact transcript for the agent prompt.
  *   - Stripping `<internal>…</internal>` tags from agent output before delivery.
  *   - Applying channel-specific output escaping (HTML entities for web).
  *
  * Consumers:
- *   - runtime/message-loop.ts calls formatMessages() to build the user-turn
- *     content for the agent.
- *   - agent-pool.ts calls formatOutbound() / stripInternalTags() when
- *     delivering the agent's response to channels.
- *   - channels/web.ts and channels/whatsapp.ts use detectChannel() to
- *     determine formatting rules.
+ *   - runtime/message-loop.ts calls formatMessages() to build the user-turn content.
+ *   - agent-pool.ts calls formatOutbound() / stripInternalTags() for delivery.
+ *   - Channel addons call registerChannelDetector() to claim JID patterns.
  *   - agent-control uses detectChannel() to scope command execution.
  */
 
@@ -22,14 +19,33 @@ import { isAbsolute, resolve } from "node:path";
 import { WORKSPACE_DIR } from "./core/config.js";
 import type { NewMessage } from "./types.js";
 
-/** Recognised channel types. */
-export type ChatChannel = "web" | "whatsapp" | "unknown";
+/** Recognised channel types. Addons can register additional channels via registerChannelDetector(). */
+export type ChatChannel = "web" | string;
 
-/** Infer the channel from a chat JID string (web: prefix → web, else whatsapp). */
+type ChannelDetector = (chatJid: string) => string | null;
+const channelDetectors: ChannelDetector[] = [];
+
+/**
+ * Register a channel detector function. Addons use this to claim JID patterns
+ * for their channel type (e.g., WhatsApp addon registers @s.whatsapp.net detection).
+ * Detectors are checked in registration order; first non-null result wins.
+ */
+export function registerChannelDetector(detector: ChannelDetector): () => void {
+  channelDetectors.push(detector);
+  return () => {
+    const idx = channelDetectors.indexOf(detector);
+    if (idx >= 0) channelDetectors.splice(idx, 1);
+  };
+}
+
+/** Infer the channel from a chat JID string. Checks registered detectors, then falls back to "web" prefix detection. */
 export function detectChannel(chatJid: string | null | undefined): ChatChannel {
   if (!chatJid) return "unknown";
   if (chatJid.startsWith("web:")) return "web";
-  if (chatJid.includes("@s.whatsapp.net") || chatJid.endsWith("@g.us")) return "whatsapp";
+  for (const detect of channelDetectors) {
+    const result = detect(chatJid);
+    if (result) return result;
+  }
   return "unknown";
 }
 

@@ -53,7 +53,7 @@ export type RuntimeBootstrapState = StartRuntimeLoopDeps["state"];
 /** Web channel contract required by runtime bootstrap orchestration. */
 export type RuntimeBootstrapWeb = RuntimeWebWorkerChannel & ShutdownDeps["web"];
 
-/** WhatsApp (removed — now addon) channel contract required by runtime bootstrap orchestration. */
+/** Legacy channel contract — retained for backward compatibility. */
 
 /** Optional pushover channel contract required by runtime bootstrap orchestration. */
 export type RuntimeBootstrapPushover = RuntimePushoverWorkerChannel & NonNullable<ShutdownDeps["pushover"]>;

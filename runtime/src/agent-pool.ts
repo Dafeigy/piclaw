@@ -35,6 +35,7 @@ import {
 import { type AgentControlCommand, type AgentControlResult } from "./agent-control/index.js";
 import { SESSIONS_DIR, WORKSPACE_DIR } from "./core/config.js";
 import { getChatChannel, getChatJid } from "./core/chat-context.js";
+import { registerChannelDetector } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
 import { type ActiveChatAgent } from "./agent-pool/branch-manager.js";
 import {
@@ -101,6 +102,7 @@ export interface AgentPoolRecoveryInstrumentationSnapshot {
 interface RuntimeInteropBridge {
   getChatJid?: (defaultValue?: string) => string;
   getChatChannel?: (defaultValue?: string) => string;
+  registerChannelDetector?: (detector: (chatJid: string) => string | null) => () => void;
   getExtensionKvStore?: () => {
     get<T = unknown>(extensionId: string, key: string, scope?: string, scopeKey?: string): T | null;
     set(extensionId: string, key: string, value: unknown, scope?: string, scopeKey?: string): void;
@@ -272,6 +274,7 @@ export class AgentPool {
     const runtimeInterop = ((globalThis as { __piclawRuntimeInterop?: RuntimeInteropBridge }).__piclawRuntimeInterop ||= {});
     runtimeInterop.getChatJid = getChatJid;
     runtimeInterop.getChatChannel = getChatChannel;
+    runtimeInterop.registerChannelDetector = registerChannelDetector;
     runtimeInterop.getExtensionKvStore = () => ({
       get: extensionKvGet,
       set: extensionKvSet,

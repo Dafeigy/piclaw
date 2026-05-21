@@ -1951,15 +1951,11 @@ export function getToolOutputConfig(): Readonly<ToolOutputConfig> {
 }
 
 // ---------------------------------------------------------------------------
-// WhatsApp (removed — now addon) channel settings.
 // ---------------------------------------------------------------------------
 
-/** Typed WhatsApp (removed — now addon) channel settings grouped for startup/channel wiring. */
 
 
-/** Grouped WhatsApp (removed — now addon) channel settings. */
 
-/** Return the grouped WhatsApp (removed — now addon) settings for startup and channel wiring. */
 
 // ---------------------------------------------------------------------------
 // Pushover notification channel settings.

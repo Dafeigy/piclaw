@@ -7,7 +7,7 @@
  *
  * Consumers:
  *   - agent-pool.ts calls applyControlCommand() to execute control commands.
- *   - runtime/message-loop.ts calls it for WhatsApp control commands.
+ *   - runtime/message-loop.ts calls it for channel control commands.
  *   - channels/web/request-router-service.ts calls it for web commands.
  */
 

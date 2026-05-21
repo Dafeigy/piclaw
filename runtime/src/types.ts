@@ -8,12 +8,12 @@
  */
 
 /**
- * Configuration for a single chat endpoint (WhatsApp group, web chat, etc.).
+ * Configuration for a single chat endpoint (web chat, addon channel, etc.).
  * Loaded from the config file and used by the router (router.ts) to decide
  * whether to process inbound messages.
  */
 export interface ChatConfig {
-  /** Unique identifier for the chat (WhatsApp JID or web channel id). */
+  /** Unique identifier for the chat (web channel id or addon-specific JID). */
   jid: string;
   /** Human-readable name for the chat, used in logging and UI. */
   name: string;
@@ -22,7 +22,7 @@ export interface ChatConfig {
 }
 
 /**
- * Represents an inbound message arriving from any channel (WhatsApp, web, scheduled task).
+ * Represents an inbound message arriving from any channel (web, addon channels, scheduled task).
  * Created by channel adapters and passed to the router/queue for processing.
  */
 export interface NewMessage {

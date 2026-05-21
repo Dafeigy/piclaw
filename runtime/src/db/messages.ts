@@ -13,7 +13,7 @@
  *   - channels/web/message-store.ts wraps many functions for the web channel.
  *   - channels/web/handlers/posts.ts uses timeline/search/delete functions.
  *   - agent-control/handlers/info.ts uses searchMessages for `/search`.
- *   - channels/whatsapp.ts calls storeMessage() for inbound WhatsApp messages.
+ *   - Channel addons call storeMessage() for inbound messages.
  *   - agent-pool.ts calls storeMessage() to persist agent responses.
  */
 

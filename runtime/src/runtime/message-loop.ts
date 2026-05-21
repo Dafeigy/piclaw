@@ -6,7 +6,7 @@
  *   2. Detects whether each message is a control command (agent-control) or
  *      a regular user message.
  *   3. Formats messages into XML and enqueues agent runs on the AgentQueue.
- *   4. Delivers agent responses via the WhatsApp (removed — now addon) channel.
+ *   4. Delivers agent responses to non-web channels (addon-provided).
  *
  * Also provides the processChat() helper used by the web channel to inject
  * messages directly into the queue without going through the poll cycle.

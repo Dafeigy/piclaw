@@ -49,7 +49,7 @@ export interface RuntimeWebWorkerChannel {
   resumePendingChats: (chatJid?: string) => void;
 }
 
-/** WhatsApp (removed — now addon)-channel capability required by runtime worker startup. */
+/** Optional non-web channel capability for runtime worker startup. */
 
 /** Optional Pushover-channel capability required by runtime worker startup. */
 export interface RuntimePushoverWorkerChannel {

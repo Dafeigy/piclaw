@@ -8,7 +8,7 @@
  * Consumers:
  *   - agent-pool.ts uses getChatJid() / getChatChannel() when building the
  *     pi-agent session to tag tool invocations.
- *   - channels/formatting.ts reads the channel to decide WhatsApp vs web
+ *   - channels/formatting.ts reads the channel to decide channel-specific formatting
  *     formatting rules.
  *   - extensions/* may read context to scope database queries.
  *   - runtime.ts / runtime/message-loop.ts call withChatContext() at the top
@@ -21,7 +21,7 @@ import { AsyncLocalStorage } from "async_hooks";
 export interface ChatContext {
   /** The JID (chat identifier) currently being processed. */
   chatJid: string;
-  /** Channel name, e.g. "whatsapp" or "web". */
+  /** Channel name, e.g. "web" or addon-registered channel types. */
   channel: string;
 }
 
