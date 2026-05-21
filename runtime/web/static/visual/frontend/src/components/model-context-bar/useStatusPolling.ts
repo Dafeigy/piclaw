@@ -8,6 +8,7 @@ import { providerConfigured } from "../../app/providerState";
 import { safeGetItem, safeSetItem } from "../../utils/storage";
 
 import { createLogger } from "../../utils/logger";
+import { updateAgentDisplayName } from "../../api/agent-identity";
 const log = createLogger("ModelContextBar");
 
 
@@ -119,6 +120,15 @@ export function useStatusPolling(): UseStatusPollingResult {
         }
       }
       pollTick.value += 1;
+
+      // Fetch agent display name from roster (best-effort, non-blocking)
+      try {
+        const rosterRes = await fetch("/agent/roster", { signal: statusAbort.current.signal });
+        if (rosterRes.ok) {
+          const roster = await rosterRes.json() as { agents?: Array<{ name?: string }> };
+          updateAgentDisplayName(roster.agents?.[0]?.name);
+        }
+      } catch { /* ignore roster fetch failure */ }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
       log.warn("status fetch failed:", err);

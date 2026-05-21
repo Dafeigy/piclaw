@@ -7,6 +7,7 @@ import { MessageList } from "../components/MessageList";
 import { safeGetItem, safeSetItem } from "../utils/storage";
 
 import { createLogger } from "../utils/logger";
+import { agentDisplayName } from "../api/agent-identity";
 const log = createLogger("ChatPanel");
 
 // Module-level signal: persists draft text across ChatPanel mounts/unmounts
@@ -360,7 +361,7 @@ export function ChatPanel({ onOpenPalette }: ChatPanelProps = {}) {
       const detail = (e as CustomEvent).detail;
       if (!detail) return;
       const body = typeof detail.content === "string" ? detail.content.slice(0, 100) : "New message";
-      try { new Notification("PiClaw", { body, icon: "/static/img/favicon.png" }); } catch {}
+      try { new Notification(agentDisplayName.value, { body, icon: "/static/img/favicon.png" }); } catch {}
     };
     window.addEventListener("piclaw:new-message", handler);
     return () => window.removeEventListener("piclaw:new-message", handler);

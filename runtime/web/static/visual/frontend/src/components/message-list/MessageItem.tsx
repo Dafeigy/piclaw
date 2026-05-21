@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "preact/hooks";
+import { agentDisplayName } from "../../api/agent-identity";
 import { HighlightPopup } from "./HighlightPopup";
 import { serializeSelection, applyHighlights, clearHighlights, HIGHLIGHT_COLORS, type HighlightRange } from "../../utils/highlight-serializer";
 import { ImageLightbox } from "../ImageLightbox";
@@ -267,7 +268,7 @@ export function MessageItem({
     }
   }
 
-  const displayName = isUser ? "You" : "PiClaw";
+  const displayName = isUser ? "You" : agentDisplayName.value;
 
   const [userImgError, setUserImgError] = useState(false);
   const [avatarPopover, setAvatarPopover] = useState<{ type: "user" | "agent"; x: number; y: number } | null>(null);
