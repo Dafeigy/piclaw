@@ -329,7 +329,7 @@
 }
 
 .workspace-menu-scale-control {
-    display: flex;
+    display: none; /* Only visible in Android standalone PWA mode */
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -337,6 +337,12 @@
     min-height: 36px;
     color: var(--text-primary);
     font-size: 13px;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+    .workspace-menu-scale-control {
+        display: flex;
+    }
 }
 
 .workspace-menu-scale-input-wrap {
