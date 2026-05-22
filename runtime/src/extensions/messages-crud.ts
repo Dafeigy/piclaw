@@ -836,6 +836,7 @@ function executeGet(params: MessagesParams, defaultChat: string): AgentToolResul
       if (Array.isArray(msgAnnotations) && msgAnnotations.length > 0) {
         const annSummary = msgAnnotations.map((a: any) => {
           if (a?.type === 'highlight') return `- highlight: "${clipText(a.text ?? '', 60)}" (${a.color})`;
+          if (a?.type === 'aside') return `- aside: "${clipText(a.text ?? '', 40)}" \u2192 "${clipText(a.note ?? '', 80)}"`;
           return `- ${a?.type ?? 'unknown'}`;
         }).join("\n");
         parts.push(`\nAnnotations:\n${annSummary}`);
