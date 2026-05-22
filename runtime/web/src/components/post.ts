@@ -14,11 +14,15 @@ import { ImageAnnotator, canAnnotate } from './image-annotator.js';
 import { FilePill } from './file-pill.js';
 import {
     applyHighlightsToElement,
+    applyAsidesToElement,
     extractHighlightsFromAnnotations,
+    extractAsidesFromAnnotations,
     getSelectionInElement,
     HIGHLIGHT_COLORS,
     persistHighlight,
+    persistAside,
     type PostHighlight,
+    type PostAside,
 } from './post-highlights.js';
 import { buildSpeakablePostText, getSpeechPlaybackState, isSpeechSynthesisSupported, speakPostText, stopSpeechPlayback, subscribeSpeechPlayback } from './post-speech.ts';
 import { copyPlainTextSelectionFromElement, readSessionStorageFlagBestEffort, resolveLinkPreviewSiteName, writeClipboardDataViaExecCommand, writeClipboardTextBestEffort, writeSessionStorageFlagBestEffort } from './post-runtime-safety.js';
@@ -936,6 +940,8 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
     const [speechPlaybackState, setSpeechPlaybackState] = useState(() => getSpeechPlaybackState());
     const [highlightPopup, setHighlightPopup] = useState(null);
     const [highlightVersion, setHighlightVersion] = useState(0);
+    const [asideInput, setAsideInput] = useState(null); // { text, textOffset, rect }
+    const [asideText, setAsideText] = useState('');
     const contentRef = useRef(null);
     const copyResetTimerRef = useRef(null);
 
@@ -1072,6 +1078,41 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
         }
         setHighlightVersion((v) => v + 1);
     }, [highlightPopup, post.id, post.chat_jid, data]);
+
+    const handleAddAside = useCallback(() => {
+        if (!highlightPopup) return;
+        setAsideInput({ text: highlightPopup.text, textOffset: highlightPopup.textOffset, rect: highlightPopup.rect });
+        setAsideText('');
+        setHighlightPopup(null);
+        window.getSelection()?.removeAllRanges();
+    }, [highlightPopup]);
+
+    const handleSaveAside = useCallback(async () => {
+        if (!asideInput || !asideText.trim()) return;
+        const aside: PostAside = {
+            type: 'aside',
+            text: asideInput.text,
+            textOffset: asideInput.textOffset,
+            note: asideText.trim(),
+        };
+        setAsideInput(null);
+        setAsideText('');
+        if (contentRef.current) {
+            applyAsidesToElement(contentRef.current, [aside]);
+        }
+        try {
+            const updated = await persistAside(post.id, post.chat_jid, data.annotations, aside);
+            data.annotations = updated;
+        } catch (err) {
+            console.warn('[post-aside] Failed to persist aside:', err);
+        }
+        setHighlightVersion((v) => v + 1);
+    }, [asideInput, asideText, post.id, post.chat_jid, data]);
+
+    const handleCancelAside = useCallback(() => {
+        setAsideInput(null);
+        setAsideText('');
+    }, []);
 
     const handleAnnotationSave = useCallback((result) => {
         setAnnotatingImage(null);
@@ -1237,11 +1278,13 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
         return enhanceCodeBlocks(contentRef.current);
     }, [renderedHtml]);
 
-    // Re-apply saved text highlights after content renders
+    // Re-apply saved text highlights and asides after content renders
     useEffect(() => {
         if (!contentRef.current) return;
         const highlights = extractHighlightsFromAnnotations(data.annotations);
         if (highlights.length > 0) applyHighlightsToElement(contentRef.current, highlights);
+        const asides = extractAsidesFromAnnotations(data.annotations);
+        if (asides.length > 0) applyAsidesToElement(contentRef.current, asides);
     }, [renderedHtml, highlightVersion]);
 
     // Listen for text selection to show highlight popup
@@ -1676,6 +1719,33 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
                         title=${`Highlight ${c.name}`}
                     />
                 `)}
+                <button
+                    class="post-aside-add-btn"
+                    onClick=${(e) => { e.preventDefault(); e.stopPropagation(); handleAddAside(); }}
+                    title="Add note"
+                >✎</button>
+            </div>
+        `}
+        ${asideInput && html`
+            <div
+                class="post-aside-input-popup"
+                style="position:fixed; left:${Math.max(8, asideInput.rect.left)}px; top:${asideInput.rect.bottom + 8}px; z-index:100"
+            >
+                <textarea
+                    class="post-aside-textarea"
+                    placeholder="Add a note…"
+                    value=${asideText}
+                    onInput=${(e) => setAsideText(e.currentTarget.value)}
+                    onKeyDown=${(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSaveAside(); }
+                        if (e.key === 'Escape') handleCancelAside();
+                    }}
+                    ref=${(el) => el && requestAnimationFrame(() => el.focus())}
+                />
+                <div class="post-aside-input-actions">
+                    <button class="post-aside-save-btn" onClick=${handleSaveAside} disabled=${!asideText.trim()}>Save</button>
+                    <button class="post-aside-cancel-btn" onClick=${handleCancelAside}>Cancel</button>
+                </div>
             </div>
         `}
 

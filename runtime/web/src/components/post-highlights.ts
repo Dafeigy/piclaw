@@ -20,6 +20,15 @@ export interface PostHighlight {
   color: string;
 }
 
+export interface PostAside {
+  type: 'aside';
+  text: string;
+  textOffset: number;
+  note: string;
+}
+
+export type PostAnnotation = PostHighlight | PostAside;
+
 // ── Highlight colors ────────────────────────────────────────────
 
 export const HIGHLIGHT_COLORS = [
@@ -47,6 +56,19 @@ export function extractHighlightsFromAnnotations(annotations: unknown[] | undefi
   );
 }
 
+export function extractAsidesFromAnnotations(annotations: unknown[] | undefined | null): PostAside[] {
+  if (!Array.isArray(annotations)) return [];
+  return annotations.filter(
+    (a): a is PostAside =>
+      a != null &&
+      typeof a === 'object' &&
+      (a as any).type === 'aside' &&
+      typeof (a as any).text === 'string' &&
+      typeof (a as any).textOffset === 'number' &&
+      typeof (a as any).note === 'string',
+  );
+}
+
 // ── Save highlights via API ─────────────────────────────────────
 
 export async function persistHighlight(
@@ -64,6 +86,24 @@ export async function persistHighlight(
       a?.textOffset === highlight.textOffset,
   );
   if (!exists) current.push(highlight);
+  await savePostAnnotations(postId, current, chatJid);
+  return current;
+}
+
+export async function persistAside(
+  postId: number,
+  chatJid: string,
+  existingAnnotations: unknown[] | undefined | null,
+  aside: PostAside,
+): Promise<unknown[]> {
+  const current = Array.isArray(existingAnnotations) ? [...existingAnnotations] : [];
+  const exists = current.some(
+    (a: any) =>
+      a?.type === 'aside' &&
+      a?.text === aside.text &&
+      a?.textOffset === aside.textOffset,
+  );
+  if (!exists) current.push(aside);
   await savePostAnnotations(postId, current, chatJid);
   return current;
 }
@@ -201,4 +241,77 @@ export function getSelectionInElement(element: HTMLElement): {
 
   const rect = range.getBoundingClientRect();
   return { text, textOffset, rect };
+}
+
+// ── Aside DOM application ───────────────────────────────────────
+
+/**
+ * Apply aside annotations to a DOM element. Inserts a tappable pill
+ * marker (⋯) after the anchored text range. Clicking reveals/hides
+ * the aside note in an inline <aside> element.
+ */
+export function applyAsidesToElement(
+  element: HTMLElement,
+  asides: PostAside[],
+): void {
+  if (!asides.length) return;
+  const fullText = element.textContent ?? '';
+
+  const sorted = asides
+    .filter((a) => {
+      const found = fullText.substring(a.textOffset, a.textOffset + a.text.length);
+      return found === a.text;
+    })
+    .sort((a, b) => b.textOffset - a.textOffset);
+
+  for (const aside of sorted) {
+    const textNodes = collectTextNodes(element);
+    insertAsideMarker(element, textNodes, aside);
+  }
+}
+
+function insertAsideMarker(
+  root: HTMLElement,
+  textNodes: { node: Text; offset: number }[],
+  aside: PostAside,
+): void {
+  const targetEnd = aside.textOffset + aside.text.length;
+
+  // Find the text node containing the end of the anchored range
+  for (const { node, offset: nodeOffset } of textNodes) {
+    const nodeLen = node.textContent?.length ?? 0;
+    const nodeEnd = nodeOffset + nodeLen;
+
+    if (targetEnd > nodeOffset && targetEnd <= nodeEnd) {
+      const localEnd = targetEnd - nodeOffset;
+
+      // Split the text node at the end of the anchor
+      if (localEnd < nodeLen) {
+        node.splitText(localEnd);
+      }
+
+      // Create the pill marker
+      const pill = root.ownerDocument.createElement('span');
+      pill.className = 'post-aside-pill';
+      pill.setAttribute('data-aside-note', aside.note);
+      pill.setAttribute('title', aside.note);
+      pill.textContent = '\u22ef'; // ⋯
+      pill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const existing = pill.nextElementSibling;
+        if (existing?.classList.contains('post-aside-content')) {
+          existing.remove();
+        } else {
+          const asideEl = root.ownerDocument.createElement('aside');
+          asideEl.className = 'post-aside-content';
+          asideEl.textContent = aside.note;
+          pill.after(asideEl);
+        }
+      });
+
+      // Insert pill after the text node (at the end of the anchor)
+      node.after(pill);
+      return;
+    }
+  }
 }
