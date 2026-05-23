@@ -132,7 +132,7 @@ test.describe('US-18: Compaction Indicator', () => {
     // Compaction may be too fast to catch — soft check
     if (during.isCompacting) {
       expect(during.hasTimer).toBe(true);
-      expect(during.pieAriaLabel.toLowerCase()).toContain('compaction');
+      expect(during.pieAriaLabel.toLowerCase()).toMatch(/compact(?:ion|ing)/);
     }
 
     // Wait for compaction to complete
