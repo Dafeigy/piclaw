@@ -616,10 +616,10 @@ export class StandaloneEditorInstance implements PaneInstance {
             ...(options.scrollPastEnd === false ? [] : [scrollPastEnd()]),
             ...(enableRichFeatures ? [indentOnInput()] : []),
             closeBrackets(),
-            ...(enableRichFeatures ? [autocompletion()] : []),
+            ...(enableRichFeatures ? [autocompletion({ activateOnTyping: false })] : []),
             ...(enableRichFeatures ? [syntaxHighlighting(headingStyle), syntaxHighlighting(classHighlighter)] : []),
             search(),
-            this.vimCompartment.of(this.vimEnabled ? vim() : []),
+            this.vimCompartment.of([]), // vim loaded async after mount
             this.themeCompartment.of(isDark ? githubDark : githubLight),
             this.accentCompartment.of(this.buildAccentTheme()),
             showPanel.of(createStatusPanel(this.ownerDocument, this.vimEnabledRef)),
@@ -685,6 +685,9 @@ export class StandaloneEditorInstance implements PaneInstance {
         if (viewState) requestAnimationFrame(() => this.restoreViewState(viewState));
         if (this.isLivePreviewAvailable() && this.livePreviewEnabled) {
             void this.applyLivePreview(true);
+        }
+        if (this.vimEnabled) {
+            void this.applyVimMode(true);
         }
     }
 
@@ -916,14 +919,25 @@ export class StandaloneEditorInstance implements PaneInstance {
 
     // ── Toggle features ─────────────────────────────────────────
 
+    private async applyVimMode(enabled: boolean): Promise<void> {
+        if (!this.view || this.disposed) return;
+        if (enabled) {
+            this.view.dispatch({
+                effects: this.vimCompartment.reconfigure(vim()),
+            });
+        } else {
+            this.view.dispatch({
+                effects: this.vimCompartment.reconfigure([]),
+            });
+        }
+    }
+
     private toggleVim(): void {
         this.vimEnabled = !this.vimEnabled;
         this.vimEnabledRef.current = this.vimEnabled;
         setLocalBool('piclaw_vim_mode', this.vimEnabled);
         if (this._vimBtn) this._vimBtn.className = `editor-status-button${this.vimEnabled ? ' active' : ''}`;
-        this.view?.dispatch({
-            effects: this.vimCompartment.reconfigure(this.vimEnabled ? vim() : []),
-        });
+        void this.applyVimMode(this.vimEnabled);
     }
 
     private toggleWhitespace(): void {
