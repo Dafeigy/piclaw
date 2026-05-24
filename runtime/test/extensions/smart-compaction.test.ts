@@ -155,6 +155,7 @@ import { completeSimple } from "@earendil-works/pi-ai";
 import {
   buildProgressiveCompactionChunks,
   buildTargetContextCompactionInstructions,
+  buildTrimmedCompactionRetryPrompt,
   clampKeepRecentTokens,
   estimatePostCompactionFit,
   getProgressiveCompactionBudget,
@@ -210,6 +211,26 @@ describe("smart-compaction", () => {
 
   it("registers the session_before_compact handler", () => {
     expect(handler).toBeTypeOf("function");
+  });
+
+  it("trims compaction retry prompts by preserving instructions and recent excerpts", () => {
+    const prompt = [
+      "# Smart compaction prompt",
+      "## Session Metadata",
+      "- important instructions",
+      "\n## Conversation Excerpts",
+      "older".repeat(20_000),
+      "RECENT-CONTEXT-MARKER",
+    ].join("\n");
+
+    const trimmed = buildTrimmedCompactionRetryPrompt(prompt, 8_000);
+
+    expect(trimmed).toBeTruthy();
+    expect(trimmed!.length).toBeLessThan(prompt.length);
+    expect(trimmed).toContain("## Session Metadata");
+    expect(trimmed).toContain("## Conversation Excerpts");
+    expect(trimmed).toContain("RECENT-CONTEXT-MARKER");
+    expect(trimmed).toContain("trimmed after provider context-overflow");
   });
 
   it("falls through for short conversations (< threshold)", async () => {

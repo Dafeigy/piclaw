@@ -669,6 +669,24 @@ export function createStreamingEventHandler(options: StreamingEventHandlerOption
       });
     }
 
+    if (customEventType === "compaction_warning") {
+      const e = event as { detail?: string; compactionCount?: number; warningThreshold?: number };
+      const count = typeof e.compactionCount === "number" && Number.isFinite(e.compactionCount) ? e.compactionCount : null;
+      const threshold = typeof e.warningThreshold === "number" && Number.isFinite(e.warningThreshold) ? e.warningThreshold : null;
+      const detail = e.detail || [
+        count != null ? `${count} successful auto-compactions in this chat` : null,
+        threshold != null ? `warning threshold ${threshold}` : null,
+      ].filter(Boolean).join(" — ");
+      options.emitter.status({
+        ...base,
+        type: "intent",
+        title: "Repeated auto-compaction",
+        detail,
+        intent_key: "compaction",
+        started_at: new Date().toISOString(),
+      });
+    }
+
     if (customEventType === "compaction_suppressed") {
       const e = event as { until?: string; failureCount?: number; detail?: string; errorMessage?: string };
       const failureCount = typeof e.failureCount === "number" && Number.isFinite(e.failureCount) ? e.failureCount : null;

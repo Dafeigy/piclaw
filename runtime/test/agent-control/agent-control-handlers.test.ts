@@ -470,7 +470,7 @@ test("agent control cycle and agent identity commands", async () => {
   expect(agentAvatar.message).toContain("Agent avatar set");
 });
 
-test("agent control blocks undersized model switches and skips them while cycling", async () => {
+test("agent control compacts undersized model switches and skips them while cycling", async () => {
   const ws = getTestWorkspace();
   restoreEnv = setEnv({ PICLAW_WORKSPACE: ws.workspace, PICLAW_STORE: ws.store, PICLAW_DATA: ws.data });
 
@@ -499,26 +499,23 @@ test("agent control blocks undersized model switches and skips them while cyclin
     return { model: session.model, thinkingLevel: "low", isScoped: false } as any;
   };
 
-  const blockedModel = await applyControlCommand(runtime as any, sizedRegistry, {
+  const downshiftModel = await applyControlCommand(runtime as any, sizedRegistry, {
     type: "model",
     provider: "openai",
     modelId: "gpt-small",
     raw: "/model openai/gpt-small",
   });
-  expect(blockedModel.status).toBe("error");
-  expect(blockedModel.message).toContain("Current context won’t fit");
-  expect(blockedModel.message).toContain("--compact");
-  expect(session.model?.id).toBe("gpt-large");
+  expect(downshiftModel.status).toBe("success");
+  expect(downshiftModel.message).toContain("Compacted with the previous model first");
+  expect(downshiftModel.model_label).toBe("openai/gpt-small");
+  expect(session.compactCalls).toBe(1);
+  expect(session.model?.id).toBe("gpt-small");
 
-  const blockedContextLengthModel = await applyControlCommand(runtime as any, sizedRegistry, {
-    type: "model",
-    provider: "openai",
-    modelId: "gpt-length",
-    raw: "/model openai/gpt-length",
-  });
-  expect(blockedContextLengthModel.status).toBe("error");
-  expect(blockedContextLengthModel.message).toContain("Current context won’t fit");
-  expect(session.model?.id).toBe("gpt-large");
+  session.model = models[0];
+  currentIndex = 0;
+  session.compactCalls = 0;
+  session.sessionContext = { messages: [{ role: "user", content: [{ type: "text", text: "large" }] }] } as any;
+  (session.sessionManager as any).getLeafId = () => "entry-large-explicit";
 
   let compactInstructions = "";
   session.compact = async (instructions?: string) => {

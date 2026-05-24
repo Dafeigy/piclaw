@@ -126,6 +126,9 @@ export {
   markChatCompactionActive,
   clearChatCompactionActive,
   getActiveChatCompactions,
+  getChatAutoCompactionWindow,
+  setChatAutoCompactionWindow,
+  resetChatAutoCompactionWindow,
 } from "./db/chat-cursors.js";
 export type {
   PreflightRun,
@@ -134,6 +137,7 @@ export type {
   AgentReplyState,
   ChatCompactionBackoffState,
   ActiveCompactionState,
+  ChatAutoCompactionWindowState,
   StalePreflightRecoveryRecord,
 } from "./db/chat-cursors.js";
 export {

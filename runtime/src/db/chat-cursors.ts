@@ -72,6 +72,16 @@ export interface ActiveCompactionState {
   reason: string | null;
 }
 
+export interface ChatAutoCompactionWindowState {
+  chatJid: string;
+  ordinal: number;
+  baselineTokens: number | null;
+  prefillTokens: number | null;
+  successCount: number;
+  warnedCount: number;
+  updatedAt: string | null;
+}
+
 /** Possible persisted assistant-output states seen after an inflight start. */
 export type AgentReplyState = "none" | "partial" | "terminal";
 
@@ -345,6 +355,119 @@ export function getActiveChatCompactions(): ActiveCompactionState[] {
     startedAt: row.compaction_active_started_at,
     reason: row.compaction_active_reason ?? null,
   }));
+}
+
+function readAutoCompactionWindowStateRow(
+  chatJid: string,
+  row: {
+    auto_compaction_window_ordinal: number | null;
+    auto_compaction_baseline_tokens: number | null;
+    auto_compaction_prefill_tokens: number | null;
+    auto_compaction_success_count: number | null;
+    auto_compaction_warned_count: number | null;
+    auto_compaction_updated_at: string | null;
+  } | null | undefined,
+): ChatAutoCompactionWindowState {
+  return {
+    chatJid,
+    ordinal: Math.max(1, Number(row?.auto_compaction_window_ordinal ?? 1) || 1),
+    baselineTokens: row?.auto_compaction_baseline_tokens == null ? null : Math.max(0, Number(row.auto_compaction_baseline_tokens) || 0),
+    prefillTokens: row?.auto_compaction_prefill_tokens == null ? null : Math.max(0, Number(row.auto_compaction_prefill_tokens) || 0),
+    successCount: Math.max(0, Number(row?.auto_compaction_success_count ?? 0) || 0),
+    warnedCount: Math.max(0, Number(row?.auto_compaction_warned_count ?? 0) || 0),
+    updatedAt: row?.auto_compaction_updated_at ?? null,
+  };
+}
+
+export function getChatAutoCompactionWindow(chatJid: string): ChatAutoCompactionWindowState {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT
+      auto_compaction_window_ordinal,
+      auto_compaction_baseline_tokens,
+      auto_compaction_prefill_tokens,
+      auto_compaction_success_count,
+      auto_compaction_warned_count,
+      auto_compaction_updated_at
+    FROM chat_cursors
+    WHERE chat_jid = ?
+  `).get(chatJid) as {
+    auto_compaction_window_ordinal: number | null;
+    auto_compaction_baseline_tokens: number | null;
+    auto_compaction_prefill_tokens: number | null;
+    auto_compaction_success_count: number | null;
+    auto_compaction_warned_count: number | null;
+    auto_compaction_updated_at: string | null;
+  } | undefined;
+  return readAutoCompactionWindowStateRow(chatJid, row);
+}
+
+export function setChatAutoCompactionWindow(
+  chatJid: string,
+  state: {
+    ordinal: number;
+    baselineTokens?: number | null;
+    prefillTokens?: number | null;
+    successCount?: number;
+    warnedCount?: number;
+    updatedAt?: string | null;
+  },
+): ChatAutoCompactionWindowState {
+  const next = {
+    ordinal: Math.max(1, Math.trunc(Number(state.ordinal) || 1)),
+    baselineTokens: state.baselineTokens == null ? null : Math.max(0, Math.trunc(Number(state.baselineTokens) || 0)),
+    prefillTokens: state.prefillTokens == null ? null : Math.max(0, Math.trunc(Number(state.prefillTokens) || 0)),
+    successCount: Math.max(0, Math.trunc(Number(state.successCount ?? 0) || 0)),
+    warnedCount: Math.max(0, Math.trunc(Number(state.warnedCount ?? 0) || 0)),
+    updatedAt: state.updatedAt ?? new Date().toISOString(),
+  };
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO chat_cursors (
+      chat_jid,
+      cursor_ts,
+      auto_compaction_window_ordinal,
+      auto_compaction_baseline_tokens,
+      auto_compaction_prefill_tokens,
+      auto_compaction_success_count,
+      auto_compaction_warned_count,
+      auto_compaction_updated_at
+    )
+    VALUES (?, '', ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chat_jid) DO UPDATE SET
+      auto_compaction_window_ordinal = excluded.auto_compaction_window_ordinal,
+      auto_compaction_baseline_tokens = excluded.auto_compaction_baseline_tokens,
+      auto_compaction_prefill_tokens  = excluded.auto_compaction_prefill_tokens,
+      auto_compaction_success_count   = excluded.auto_compaction_success_count,
+      auto_compaction_warned_count    = excluded.auto_compaction_warned_count,
+      auto_compaction_updated_at      = excluded.auto_compaction_updated_at
+  `).run(
+    chatJid,
+    next.ordinal,
+    next.baselineTokens,
+    next.prefillTokens,
+    next.successCount,
+    next.warnedCount,
+    next.updatedAt,
+  );
+  return getChatAutoCompactionWindow(chatJid);
+}
+
+export function resetChatAutoCompactionWindow(
+  chatJid: string,
+  baselineTokens: number,
+  options: { successCount?: number; warnedCount?: number; updatedAt?: string | null } = {},
+): ChatAutoCompactionWindowState {
+  const current = getChatAutoCompactionWindow(chatJid);
+  const baseline = Math.max(0, Math.trunc(Number(baselineTokens) || 0));
+  return setChatAutoCompactionWindow(chatJid, {
+    ordinal: current.ordinal + 1,
+    baselineTokens: baseline,
+    prefillTokens: baseline,
+    successCount: options.successCount ?? current.successCount,
+    warnedCount: options.warnedCount ?? current.warnedCount,
+    updatedAt: options.updatedAt ?? new Date().toISOString(),
+  });
 }
 
 // ---------------------------------------------------------------------------

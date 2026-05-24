@@ -2,11 +2,12 @@ import { beforeEach, expect, test } from "bun:test";
 
 import "../helpers.js";
 import {
+  computeAutoCompactionTokenStatus,
   estimateContextTokensFromSession,
   maybeAutoCompactSessionBeforePrompt,
   runCompactionWithTimeout,
 } from "../../src/agent-pool/compaction.js";
-import { initDatabase, setChatCompactionBackoff } from "../../src/db.js";
+import { getChatAutoCompactionWindow, initDatabase, setChatCompactionBackoff } from "../../src/db.js";
 
 beforeEach(() => {
   initDatabase();
@@ -28,6 +29,98 @@ function makeSession(messages: any[], usageTokens?: number): any {
     },
   };
 }
+
+test("computeAutoCompactionTokenStatus supports body-after-prefix growth plus hard ceiling", () => {
+  const scoped = computeAutoCompactionTokenStatus({
+    activeContextTokens: 70_000,
+    contextWindow: 100_000,
+    thresholdPercent: 75,
+    hardCeilingPercent: 95,
+    overheadTokens: 5_000,
+    scope: "body_after_prefix",
+    window: { ordinal: 3, baselineTokens: 50_000, prefillTokens: 50_000 },
+  });
+
+  expect(scoped.autoCompactionScopeTokens).toBe(20_000);
+  expect(scoped.autoCompactionScopeLimit).toBe(71_250);
+  expect(scoped.tokenLimitReached).toBe(false);
+  expect(scoped.windowOrdinal).toBe(3);
+
+  const hardCeiling = computeAutoCompactionTokenStatus({
+    activeContextTokens: 96_000,
+    contextWindow: 100_000,
+    thresholdPercent: 75,
+    hardCeilingPercent: 95,
+    overheadTokens: 5_000,
+    scope: "body_after_prefix",
+    window: { ordinal: 3, baselineTokens: 50_000, prefillTokens: 50_000 },
+  });
+
+  expect(hardCeiling.autoCompactionScopeTokens).toBe(46_000);
+  expect(hardCeiling.fullContextWindowLimitReached).toBe(true);
+  expect(hardCeiling.tokenLimitReached).toBe(true);
+});
+
+test("body-after-prefix auto-compaction resets the persisted window after success", async () => {
+  const previousScope = process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+  const previousThreshold = process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+  const previousWarning = process.env.PICLAW_COMPACTION_WARNING_THRESHOLD;
+  process.env.PICLAW_AUTO_COMPACTION_SCOPE = "body_after_prefix";
+  process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = "50";
+  process.env.PICLAW_COMPACTION_WARNING_THRESHOLD = "0";
+  try {
+    const chatJid = "web:body-prefix-reset";
+    let usageTokens = 40_000;
+    let leafId = "leaf-1";
+    const session = {
+      ...makeSession([{ role: "user", content: [{ type: "text", text: "x" }] }], usageTokens),
+      getContextUsage: () => ({ tokens: usageTokens }),
+      sessionManager: {
+        getLeafId: () => leafId,
+        getEntries: () => [leafId],
+        buildSessionContext: () => ({ messages: [{ role: "user", content: [{ type: "text", text: "x" }] }] }),
+      },
+      model: { provider: "test", id: "window-reset", contextWindow: 100_000 },
+      settingsManager: { getCompactionSettings: () => ({ enabled: true, reserveTokens: 25_000 }) },
+      isStreaming: false,
+      isCompacting: false,
+      isRetrying: false,
+      async compact() {
+        usageTokens = 12_000;
+      },
+    };
+
+    await maybeAutoCompactSessionBeforePrompt(
+      session as any,
+      chatJid,
+      { onWarn: () => undefined, onInfo: () => undefined },
+      () => undefined,
+    );
+    expect(getChatAutoCompactionWindow(chatJid).prefillTokens).toBe(44_000);
+
+    usageTokens = 92_000;
+    leafId = "leaf-2";
+    await maybeAutoCompactSessionBeforePrompt(
+      session as any,
+      chatJid,
+      { onWarn: () => undefined, onInfo: () => undefined },
+      () => undefined,
+    );
+
+    const state = getChatAutoCompactionWindow(chatJid);
+    expect(state.ordinal).toBe(2);
+    expect(state.baselineTokens).toBe(13_200);
+    expect(state.prefillTokens).toBe(13_200);
+    expect(state.successCount).toBe(1);
+  } finally {
+    if (previousScope === undefined) delete process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+    else process.env.PICLAW_AUTO_COMPACTION_SCOPE = previousScope;
+    if (previousThreshold === undefined) delete process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+    else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
+    if (previousWarning === undefined) delete process.env.PICLAW_COMPACTION_WARNING_THRESHOLD;
+    else process.env.PICLAW_COMPACTION_WARNING_THRESHOLD = previousWarning;
+  }
+});
 
 test("estimateContextTokensFromSession trusts native usage before compaction", () => {
   const session = makeSession([
@@ -151,6 +244,63 @@ test("maybeAutoCompactSessionBeforePrompt subtracts overhead before threshold ch
     else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
     if (previousOverhead === undefined) delete process.env.PICLAW_SYSTEM_PROMPT_OVERHEAD_TOKENS;
     else process.env.PICLAW_SYSTEM_PROMPT_OVERHEAD_TOKENS = previousOverhead;
+  }
+});
+
+test("maybeAutoCompactSessionBeforePrompt emits repeated-compaction warning at threshold", async () => {
+  const previousThreshold = process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+  const previousWarning = process.env.PICLAW_COMPACTION_WARNING_THRESHOLD;
+  process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = "50";
+  process.env.PICLAW_COMPACTION_WARNING_THRESHOLD = "2";
+  try {
+    const chatJid = "web:repeated-warning";
+    let usageTokens = 90_000;
+    let leafId = "leaf-1";
+    const events: any[] = [];
+    const session = {
+      ...makeSession([{ role: "user", content: [{ type: "text", text: "x" }] }], usageTokens),
+      getContextUsage: () => ({ tokens: usageTokens }),
+      sessionManager: {
+        getLeafId: () => leafId,
+        getEntries: () => [leafId],
+        buildSessionContext: () => ({ messages: [{ role: "user", content: [{ type: "text", text: "x" }] }] }),
+      },
+      model: { provider: "test", id: "warning", contextWindow: 100_000 },
+      settingsManager: { getCompactionSettings: () => ({ enabled: true, reserveTokens: 25_000 }) },
+      isStreaming: false,
+      isCompacting: false,
+      isRetrying: false,
+      async compact() {
+        usageTokens = 10_000;
+      },
+    };
+
+    await maybeAutoCompactSessionBeforePrompt(
+      session as any,
+      chatJid,
+      { onWarn: () => undefined, onInfo: () => undefined },
+      (event) => events.push(event),
+    );
+    usageTokens = 90_000;
+    leafId = "leaf-2";
+    await maybeAutoCompactSessionBeforePrompt(
+      session as any,
+      chatJid,
+      { onWarn: () => undefined, onInfo: () => undefined },
+      (event) => events.push(event),
+    );
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "compaction_warning",
+      reason: "repeated_successes",
+      compactionCount: 2,
+      warningThreshold: 2,
+    }));
+  } finally {
+    if (previousThreshold === undefined) delete process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+    else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
+    if (previousWarning === undefined) delete process.env.PICLAW_COMPACTION_WARNING_THRESHOLD;
+    else process.env.PICLAW_COMPACTION_WARNING_THRESHOLD = previousWarning;
   }
 });
 

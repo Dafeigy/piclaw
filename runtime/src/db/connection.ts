@@ -480,7 +480,13 @@ function createSchema(database: Database): void {
       failed_created_at    TEXT,
       queued_followups_json TEXT,
       compaction_active_started_at TEXT,
-      compaction_active_reason TEXT
+      compaction_active_reason TEXT,
+      auto_compaction_window_ordinal INTEGER,
+      auto_compaction_baseline_tokens INTEGER,
+      auto_compaction_prefill_tokens INTEGER,
+      auto_compaction_success_count INTEGER,
+      auto_compaction_warned_count INTEGER,
+      auto_compaction_updated_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS token_usage (
@@ -771,6 +777,12 @@ function ensureChatCursorColumns(database: Database): void {
     ["compaction_last_error",     "TEXT"],
     ["compaction_active_started_at", "TEXT"],
     ["compaction_active_reason",     "TEXT"],
+    ["auto_compaction_window_ordinal", "INTEGER"],
+    ["auto_compaction_baseline_tokens", "INTEGER"],
+    ["auto_compaction_prefill_tokens", "INTEGER"],
+    ["auto_compaction_success_count", "INTEGER"],
+    ["auto_compaction_warned_count", "INTEGER"],
+    ["auto_compaction_updated_at", "TEXT"],
   ];
   for (const [col, type] of toAdd) {
     if (!cols.has(col)) {

@@ -162,6 +162,29 @@ function buildTargetContextGuidance(targetContextWindow: number | null, targetMo
 
 const FULL_PASS_FALLBACK_CONTEXT_FRACTION = 0.6;
 
+function isCompactionInputOverflow(message: string): boolean {
+  return /context\s*(?:length|window)|maximum context|max(?:imum)? tokens|too many tokens|input too large|prompt too large|exceeds.*(?:context|token)|token limit/i.test(message);
+}
+
+export function buildTrimmedCompactionRetryPrompt(promptText: string, targetPromptTokens: number): string | null {
+  const targetChars = Math.max(8_000, Math.floor(targetPromptTokens * 4));
+  if (promptText.length <= targetChars) return null;
+  const marker = "\n## Conversation Excerpts";
+  const markerIndex = promptText.indexOf(marker);
+  const notice = "\n\n… (older/less relevant compaction excerpts trimmed after provider context-overflow; preserve current task continuity from the remaining excerpts) …\n\n";
+  if (markerIndex < 0) {
+    const headChars = Math.min(Math.floor(targetChars * 0.35), Math.floor(promptText.length * 0.35));
+    const tailChars = Math.max(1_000, targetChars - headChars - notice.length);
+    return `${promptText.slice(0, headChars)}${notice}${promptText.slice(-tailChars)}`;
+  }
+
+  const headEnd = Math.min(promptText.length, markerIndex + marker.length + 512);
+  const head = promptText.slice(0, headEnd);
+  const tailChars = targetChars - head.length - notice.length;
+  if (tailChars < 1_000) return null;
+  return `${head}${notice}${promptText.slice(-tailChars)}`;
+}
+
 function estimateFullPassFallbackPromptTokens(llmMessages: Message[], tokensBefore: number): number {
   const serializedChars = llmMessages.reduce((total, message) => {
     const content = Array.isArray(message.content) ? message.content : [message.content];
@@ -481,29 +504,59 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         }
       }
 
-      const messages: Message[] = [
-        {
-          role: "user",
-          content: [{ type: "text", text: promptText }],
-          timestamp: Date.now(),
-        },
-      ];
+      let activePromptText = promptText;
 
       const requestedMaxTokens = Math.floor(0.8 * settings.reserveTokens);
       const authForCompletion = auth as { apiKey?: string; headers?: Record<string, string> };
 
       try {
-        const safeOutput = getSafeCompactionMaxTokens(model, promptText, requestedMaxTokens);
-        const completionOptions = (model as any).reasoning
-          ? { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: authForCompletion.apiKey, headers: authForCompletion.headers, reasoning: getCompactionReasoningEffort(model) }
-          : { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: authForCompletion.apiKey, headers: authForCompletion.headers };
-        ctx.ui.setWorkingMessage("Smart compaction: generating selective summary…");
-        publishContextEstimate(ctx, estimateCompactionPromptTokens(promptText), "generating_summary");
-        const response = await completeSimple(
+        const makeCompletionOptions = (prompt: string) => {
+          const safeOutput = getSafeCompactionMaxTokens(model, prompt, requestedMaxTokens);
+          return (model as any).reasoning
+            ? { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: authForCompletion.apiKey, headers: authForCompletion.headers, reasoning: getCompactionReasoningEffort(model) }
+            : { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: authForCompletion.apiKey, headers: authForCompletion.headers };
+        };
+        const runCompletion = async (prompt: string) => await completeSimple(
           model,
-          { systemPrompt: SYSTEM_PROMPT, messages },
-          completionOptions,
+          { systemPrompt: SYSTEM_PROMPT, messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: prompt }],
+              timestamp: Date.now(),
+            },
+          ] },
+          makeCompletionOptions(prompt),
         );
+
+        ctx.ui.setWorkingMessage("Smart compaction: generating selective summary…");
+        publishContextEstimate(ctx, estimateCompactionPromptTokens(activePromptText), "generating_summary");
+        let response;
+        try {
+          response = await runCompletion(activePromptText);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const trimmedPrompt = isCompactionInputOverflow(msg)
+            ? buildTrimmedCompactionRetryPrompt(activePromptText, Math.floor(getProgressiveCompactionBudget(model, targetContext.targetContextWindow).contextWindow * 0.65))
+            : null;
+          if (!trimmedPrompt || abortSignal.aborted) throw err;
+          activePromptText = trimmedPrompt;
+          log.debug(`Smart compaction input overflow; retrying with trimmed prompt (~${Math.round(estimateCompactionPromptTokens(activePromptText) / 1000)}k tokens).`);
+          publishContextEstimate(ctx, estimateCompactionPromptTokens(activePromptText), "generating_summary_trimmed_retry");
+          response = await runCompletion(activePromptText);
+        }
+
+        if (response.stopReason === "error") {
+          const errorMessage = (response as any).errorMessage || "unknown";
+          const trimmedPrompt = isCompactionInputOverflow(errorMessage)
+            ? buildTrimmedCompactionRetryPrompt(activePromptText, Math.floor(getProgressiveCompactionBudget(model, targetContext.targetContextWindow).contextWindow * 0.65))
+            : null;
+          if (trimmedPrompt && trimmedPrompt !== activePromptText && !abortSignal.aborted) {
+            activePromptText = trimmedPrompt;
+            log.debug(`Smart compaction LLM overflow response; retrying with trimmed prompt (~${Math.round(estimateCompactionPromptTokens(activePromptText) / 1000)}k tokens).`);
+            publishContextEstimate(ctx, estimateCompactionPromptTokens(activePromptText), "generating_summary_trimmed_retry");
+            response = await runCompletion(activePromptText);
+          }
+        }
 
         if (response.stopReason === "error") {
           log.debug(

@@ -95,6 +95,9 @@ const envConfig = readEnvFile([
   "PICLAW_TURN_MAX_TOOL_USE_MESSAGES",
   "PICLAW_PROGRESS_WATCHDOG_ENABLED",
   "PICLAW_PROGRESS_WATCHDOG_TIMEOUT_MS",
+  "PICLAW_AUTO_COMPACTION_SCOPE",
+  "PICLAW_COMPACTION_HARD_CEILING_PERCENT",
+  "PICLAW_COMPACTION_WARNING_THRESHOLD",
   "PICLAW_TOOL_RESULT_COMPACTION_ENABLED",
   "PICLAW_TOOL_RESULT_COMPACTION_TOOLS",
   "PICLAW_TOOL_RESULT_SEMANTIC_SUMMARY_ENABLED",
@@ -912,6 +915,9 @@ const PROGRESS_WATCHDOG_TIMEOUT_CONFIG_KEYS = [
 const configProgressWatchdogEnabled = pickBoolean(compactionConfig, PROGRESS_WATCHDOG_ENABLED_CONFIG_KEYS);
 const configProgressWatchdogTimeoutMs = pickNumber(compactionConfig, PROGRESS_WATCHDOG_TIMEOUT_CONFIG_KEYS);
 const configCompactionThresholdPercent = pickNumber(compactionConfig, ["thresholdPercent", "threshold_percent", "PICLAW_COMPACTION_THRESHOLD_PERCENT"]);
+const configAutoCompactionScope = pickString(compactionConfig, ["autoCompactionScope", "auto_compaction_scope", "autoCompactScope", "PICLAW_AUTO_COMPACTION_SCOPE"]);
+const configCompactionHardCeilingPercent = pickNumber(compactionConfig, ["hardCeilingPercent", "hard_ceiling_percent", "compactionHardCeilingPercent", "PICLAW_COMPACTION_HARD_CEILING_PERCENT"]);
+const configCompactionWarningThreshold = pickNumber(compactionConfig, ["warningThreshold", "warning_threshold", "repeatedWarningThreshold", "PICLAW_COMPACTION_WARNING_THRESHOLD"]);
 const configCompactionBackoffDecayFactor = pickNumber(compactionConfig, ["backoffDecayFactor", "backoff_decay_factor", "PICLAW_COMPACTION_BACKOFF_DECAY_FACTOR"]);
 const configToolResultCompactionEnabled = pickBoolean(compactionConfig, [
   "toolResultCompactionEnabled",
@@ -1010,6 +1016,8 @@ export interface SessionStorageConfig {
   autoRotate: boolean;
 }
 
+export type AutoCompactionScope = "total" | "body_after_prefix";
+
 export interface CompactionRuntimeConfig {
   timeoutMs: number;
   backoffBaseMs: number;
@@ -1018,6 +1026,12 @@ export interface CompactionRuntimeConfig {
   progressWatchdogTimeoutMs: number;
   /** Context utilization % at which auto-compaction triggers (0-100). Default 75. */
   thresholdPercent: number;
+  /** Token-accounting scope for auto-compaction threshold checks. Default total. */
+  autoCompactionScope: AutoCompactionScope;
+  /** Full-window utilization % that always triggers compaction even for scoped growth. Default 100. */
+  hardCeilingPercent: number;
+  /** Emit a warning after this many successful auto-compactions in one chat. 0 disables. */
+  warningThreshold: number;
   /** Multiplier applied to backoff duration after a successful compaction (0-1). Default 0.5. */
   backoffDecayFactor: number;
 }
@@ -1491,6 +1505,14 @@ let COMPACTION_RUNTIME_CONFIG: CompactionRuntimeConfig = Object.seal({
     : DEFAULT_PROGRESS_WATCHDOG_TIMEOUT_MS,
   thresholdPercent: typeof configCompactionThresholdPercent === "number" && configCompactionThresholdPercent > 0 && configCompactionThresholdPercent <= 100
     ? configCompactionThresholdPercent : 75,
+  autoCompactionScope: normalizeAutoCompactionScope(
+    process.env.PICLAW_AUTO_COMPACTION_SCOPE ?? envConfig.PICLAW_AUTO_COMPACTION_SCOPE ?? configAutoCompactionScope,
+    "total",
+  ),
+  hardCeilingPercent: typeof configCompactionHardCeilingPercent === "number" && configCompactionHardCeilingPercent > 0 && configCompactionHardCeilingPercent <= 100
+    ? configCompactionHardCeilingPercent : 100,
+  warningThreshold: typeof configCompactionWarningThreshold === "number" && configCompactionWarningThreshold >= 0
+    ? Math.round(configCompactionWarningThreshold) : 3,
   backoffDecayFactor: typeof configCompactionBackoffDecayFactor === "number" && configCompactionBackoffDecayFactor > 0 && configCompactionBackoffDecayFactor <= 1
     ? configCompactionBackoffDecayFactor : 0.5,
 });
@@ -1518,6 +1540,20 @@ function parseOptionalNonNegativeDurationMs(value: unknown, fallback: number): n
   return Math.max(0, Math.round(parsed));
 }
 
+function normalizeAutoCompactionScope(value: unknown, fallback: AutoCompactionScope): AutoCompactionScope {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "body_after_prefix" || normalized === "bodyafterprefix") return "body_after_prefix";
+  if (normalized === "total") return "total";
+  return fallback;
+}
+
+function parsePercentWithBounds(value: unknown, fallback: number, minExclusive = 0, maxInclusive = 100): number {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= minExclusive || parsed > maxInclusive) return fallback;
+  return parsed;
+}
+
 export function getCompactionRuntimeConfig(): Readonly<CompactionRuntimeConfig> {
   return Object.freeze({
     timeoutMs: parsePositiveDurationMs(process.env.PICLAW_COMPACTION_TIMEOUT_MS, COMPACTION_RUNTIME_CONFIG.timeoutMs),
@@ -1537,6 +1573,18 @@ export function getCompactionRuntimeConfig(): Readonly<CompactionRuntimeConfig> 
         ? parsed
         : COMPACTION_RUNTIME_CONFIG.thresholdPercent;
     })(),
+    autoCompactionScope: normalizeAutoCompactionScope(
+      process.env.PICLAW_AUTO_COMPACTION_SCOPE ?? envConfig.PICLAW_AUTO_COMPACTION_SCOPE,
+      COMPACTION_RUNTIME_CONFIG.autoCompactionScope,
+    ),
+    hardCeilingPercent: parsePercentWithBounds(
+      process.env.PICLAW_COMPACTION_HARD_CEILING_PERCENT ?? envConfig.PICLAW_COMPACTION_HARD_CEILING_PERCENT,
+      COMPACTION_RUNTIME_CONFIG.hardCeilingPercent,
+    ),
+    warningThreshold: parseOptionalNonNegativeDurationMs(
+      process.env.PICLAW_COMPACTION_WARNING_THRESHOLD ?? envConfig.PICLAW_COMPACTION_WARNING_THRESHOLD,
+      COMPACTION_RUNTIME_CONFIG.warningThreshold,
+    ),
     backoffDecayFactor: (() => {
       const parsed = Number(process.env.PICLAW_COMPACTION_BACKOFF_DECAY_FACTOR);
       return Number.isFinite(parsed) && parsed > 0 && parsed <= 1
@@ -1553,6 +1601,9 @@ export function setCompactionRuntimeConfig(patch: {
   progressWatchdogEnabled?: boolean;
   progressWatchdogTimeoutMs?: number;
   thresholdPercent?: number;
+  autoCompactionScope?: AutoCompactionScope;
+  hardCeilingPercent?: number;
+  warningThreshold?: number;
   backoffDecayFactor?: number;
 }): Readonly<CompactionRuntimeConfig> {
   const current = getCompactionRuntimeConfig();
@@ -1569,6 +1620,15 @@ export function setCompactionRuntimeConfig(patch: {
     thresholdPercent: typeof patch.thresholdPercent === "number" && patch.thresholdPercent > 0 && patch.thresholdPercent <= 100
       ? patch.thresholdPercent
       : current.thresholdPercent,
+    autoCompactionScope: patch.autoCompactionScope === undefined
+      ? current.autoCompactionScope
+      : normalizeAutoCompactionScope(patch.autoCompactionScope, current.autoCompactionScope),
+    hardCeilingPercent: patch.hardCeilingPercent === undefined
+      ? current.hardCeilingPercent
+      : parsePercentWithBounds(patch.hardCeilingPercent, current.hardCeilingPercent),
+    warningThreshold: patch.warningThreshold === undefined
+      ? current.warningThreshold
+      : parseOptionalNonNegativeDurationMs(patch.warningThreshold, current.warningThreshold),
     backoffDecayFactor: typeof patch.backoffDecayFactor === "number" && patch.backoffDecayFactor > 0 && patch.backoffDecayFactor <= 1
       ? patch.backoffDecayFactor
       : current.backoffDecayFactor,
@@ -1602,6 +1662,18 @@ export function setCompactionRuntimeConfig(patch: {
     "thresholdPercent",
     "threshold_percent",
     "PICLAW_COMPACTION_THRESHOLD_PERCENT",
+    "autoCompactionScope",
+    "auto_compaction_scope",
+    "autoCompactScope",
+    "PICLAW_AUTO_COMPACTION_SCOPE",
+    "hardCeilingPercent",
+    "hard_ceiling_percent",
+    "compactionHardCeilingPercent",
+    "PICLAW_COMPACTION_HARD_CEILING_PERCENT",
+    "warningThreshold",
+    "warning_threshold",
+    "repeatedWarningThreshold",
+    "PICLAW_COMPACTION_WARNING_THRESHOLD",
     "backoffDecayFactor",
     "backoff_decay_factor",
     "PICLAW_COMPACTION_BACKOFF_DECAY_FACTOR",
@@ -1621,6 +1693,9 @@ export function setCompactionRuntimeConfig(patch: {
   compaction.progressWatchdogEnabled = next.progressWatchdogEnabled;
   compaction.progressWatchdogTimeoutMs = next.progressWatchdogTimeoutMs;
   compaction.thresholdPercent = next.thresholdPercent;
+  compaction.autoCompactionScope = next.autoCompactionScope;
+  compaction.hardCeilingPercent = next.hardCeilingPercent;
+  compaction.warningThreshold = next.warningThreshold;
   compaction.backoffDecayFactor = next.backoffDecayFactor;
   config.compaction = compaction;
   writeJsonConfig(getConfigPath(), config);
@@ -1631,6 +1706,9 @@ export function setCompactionRuntimeConfig(patch: {
   process.env.PICLAW_PROGRESS_WATCHDOG_ENABLED = next.progressWatchdogEnabled ? "1" : "0";
   process.env.PICLAW_PROGRESS_WATCHDOG_TIMEOUT_MS = String(next.progressWatchdogTimeoutMs);
   process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = String(next.thresholdPercent);
+  process.env.PICLAW_AUTO_COMPACTION_SCOPE = next.autoCompactionScope;
+  process.env.PICLAW_COMPACTION_HARD_CEILING_PERCENT = String(next.hardCeilingPercent);
+  process.env.PICLAW_COMPACTION_WARNING_THRESHOLD = String(next.warningThreshold);
   process.env.PICLAW_COMPACTION_BACKOFF_DECAY_FACTOR = String(next.backoffDecayFactor);
 
   COMPACTION_RUNTIME_CONFIG = Object.seal(next);

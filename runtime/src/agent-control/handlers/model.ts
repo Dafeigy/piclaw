@@ -161,19 +161,32 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
   }
 
   const contextFitError = getContextFitError(session, selected);
+  let compactedBeforeSwitch = false;
   if (contextFitError) {
-    if (!command.compact) {
+    const targetContextWindow = getModelContextWindow(selected) ?? getUnknownModelContextWindow();
+    const currentContextWindow = getModelContextWindow(session.model) ?? getUnknownModelContextWindow();
+    const isModelDownshift = currentContextWindow > targetContextWindow;
+    if (!command.compact && !isModelDownshift) {
       return { status: "error", message: `${contextFitError} Use \`/model ${getModelLabel(selected)} --compact\` to try compacting to this target first.` };
     }
 
-    const targetContextWindow = getModelContextWindow(selected) ?? getUnknownModelContextWindow();
     const chatJid = getChatJid("control:/model");
+    log.info("Compacting with current model before switching to a smaller context model", {
+      operation: "agent_control.model.downshift_compaction",
+      chatJid,
+      currentModel: getModelLabel(session.model),
+      targetModel: getModelLabel(selected),
+      currentContextWindow,
+      targetContextWindow,
+      explicitCompact: command.compact,
+      isModelDownshift,
+    });
     const compactionResult = await runCompactionWithTimeout(
       session,
       chatJid,
       { onWarn: (message, details) => log.warn(message, details) },
       async () => await session.compact(buildTargetContextCompactionInstructions(targetContextWindow, getModelLabel(selected))),
-      "model_switch",
+      isModelDownshift ? "model_downshift" : "model_switch",
     );
     if (!compactionResult.ok) {
       return {
@@ -182,6 +195,7 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
       };
     }
 
+    compactedBeforeSwitch = true;
     const remainingFitError = getContextFitError(session, selected);
     if (remainingFitError) {
       return {
@@ -205,10 +219,11 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
     ? ` Thinking level: ${thinkingLevelDisplay ?? thinkingLevel}.`
     : " Thinking is off for this model.";
   const modelLabel = `${provider}/${selected.id}`;
+  const compactionNote = compactedBeforeSwitch ? " Compacted with the previous model first so the context fits." : "";
 
   return {
     status: "success",
-    message: `Model set to ${modelLabel}.${thinkingNote}`,
+    message: `Model set to ${modelLabel}.${thinkingNote}${compactionNote}`,
     model_label: modelLabel,
     thinking_level: thinkingLevel,
     thinking_level_label: thinkingLevelDisplay,
