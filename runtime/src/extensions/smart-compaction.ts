@@ -21,13 +21,14 @@ import { estimateCompactionPromptTokens, estimateTokensFromChars, getContextWind
 import { compressFilePaths, fileListsFromOps } from "./smart-compaction/files.js";
 import { convertMessagesWithMetadata, type SourceMessage } from "./smart-compaction/messages.js";
 import { appendFileLists, buildTurnPrefixSummary, extractKeptMessagesSummary, tryNoOpCompaction } from "./smart-compaction/noop.js";
-import { buildProgressiveCompactionChunks, getProgressiveCompactionBudget, runProgressiveCompaction } from "./smart-compaction/progressive.js";
+import { buildProgressiveCompactionChunks, buildTrimmedProgressiveMergeRetryPrompt, getProgressiveCompactionBudget, runProgressiveCompaction } from "./smart-compaction/progressive.js";
 import { clampKeepRecentTokens, estimatePostCompactionFit, getCompactionReasoningEffort, getSafeCompactionMaxTokens } from "./smart-compaction/safety.js";
 import { buildSelectivePrompt, detectRecentTopicShift, SYSTEM_PROMPT } from "./smart-compaction/selective-prompt.js";
 import { sanitizeContextPruneCompactionMessages } from "./context-prune/pruner.js";
 
 export {
   buildProgressiveCompactionChunks,
+  buildTrimmedProgressiveMergeRetryPrompt,
   clampKeepRecentTokens,
   estimatePostCompactionFit,
   getProgressiveCompactionBudget,

@@ -14,7 +14,7 @@ import type { AgentControlCommand, AgentControlResult } from "../agent-control-t
 import { THINKING_LEVELS, normalizeModelMatch, resolveThinkingAlias, isEffortProvider, formatThinkingLevelForDisplay } from "../agent-control-helpers.js";
 import { createLogger, debugSuppressedError } from "../../utils/logger.js";
 import { getChatJid } from "../../core/chat-context.js";
-import { estimateContextTokensFromSession, runCompactionWithTimeout } from "../../agent-pool/compaction.js";
+import { estimateContextTokensFromSession, noteCompactionSuccess, runCompactionWithTimeout } from "../../agent-pool/compaction.js";
 import { buildTargetContextCompactionInstructions } from "../../extensions/smart-compaction.js";
 import { applyTokenEstimateSafetyMultiplier, getContextWindowFromModel, getEffectiveContextWindow, getSystemPromptOverheadTokens, getUnknownModelContextWindow } from "../../utils/context-window-budget.js";
 
@@ -195,6 +195,11 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
       };
     }
 
+    noteCompactionSuccess(session, chatJid, isModelDownshift ? "model_downshift" : "model_switch", {
+      onInfo: (message, details) => log.info(message, details),
+      onWarn: (message, details) => log.warn(message, details),
+      countSuccess: false,
+    });
     compactedBeforeSwitch = true;
     const remainingFitError = getContextFitError(session, selected);
     if (remainingFitError) {

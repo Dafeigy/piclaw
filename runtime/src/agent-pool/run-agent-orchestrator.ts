@@ -39,19 +39,17 @@ import {
   cancelScheduledIdleAutoCompaction,
   clearCompactionFailureBackoff,
   estimateContextTokensFromSession,
-  getModelContextWindow,
+  getAutoCompactionTokenStatusForSession,
   isCompactionCancellationError,
   maybeAutoCompactSessionBeforePrompt,
   noteCompactionFailure,
+  noteCompactionSuccess,
   runCompactionWithTimeout,
   scheduleIdleAutoCompaction,
 } from "./compaction.js";
 import {
-  applyTokenEstimateSafetyMultiplier,
   getContextThresholdTokens,
-  getEffectiveContextWindow,
   getSystemPromptOverheadTokens,
-  getUnknownModelContextWindow,
 } from "../utils/context-window-budget.js";
 import {
   inspectBlankTurnSessionDelta,
@@ -371,6 +369,11 @@ async function maybeAutoRotateSession(
   });
   if (result.status === "success") {
     resetCompactionSuccessCount(chatJid);
+    noteCompactionSuccess(runtime.session, chatJid, "rotation", {
+      ...options,
+      countSuccess: false,
+      clearBackoff: false,
+    });
     options.onInfo?.("Auto-rotated oversized session", {
       operation: "maybe_auto_rotate_session",
       chatJid,
@@ -452,6 +455,21 @@ function emitAgentSessionEvent(onEvent: RunAgentOptions["onEvent"], event: Recor
   onEvent?.(event as AgentSessionEvent);
 }
 
+function estimatePendingInputTokens(prompt: string): number {
+  return Math.max(0, Math.ceil(String(prompt || "").length / 4));
+}
+
+function getUsageInputTokens(usage: unknown): number | null {
+  if (!usage || typeof usage !== "object") return null;
+  const record = usage as Record<string, unknown>;
+  const candidates = [record.input, record.inputTokens, record.input_tokens, record.prompt_tokens];
+  for (const value of candidates) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric >= 0) return numeric;
+  }
+  return null;
+}
+
 function getRunObservabilityDetails(
   runOptions: RunAgentOptions,
   extras: { sessionLeafId?: string | null } = {},
@@ -517,7 +535,10 @@ async function runRecoveryCompaction(
     });
     return { ok: false, errorMessage: compactionResult.errorMessage };
   }
-  clearCompactionFailureBackoff(chatJid);
+  noteCompactionSuccess(session, chatJid, "recovery", {
+    ...options,
+    countSuccess: false,
+  });
   emitAgentSessionEvent(runOptions.onEvent, {
     type: "compaction_end",
     reason: "overflow",
@@ -586,24 +607,43 @@ async function runPromptAttempt(
   ].includes(toolName);
   let sawTerminalSideEffectToolActivity = false;
 
-  const readContextUsageSnapshot = (): { tokens: number; rawTokens: number; contextWindow: number; effectiveContextWindow: number; overheadTokens: number; thresholdTokens: number; thresholdPercent: number; overThreshold: boolean } | null => {
-    const contextWindow = getModelContextWindow(session) ?? getUnknownModelContextWindow();
-    if (!Number.isFinite(contextWindow) || contextWindow <= 0) return null;
-    const rawTokens = estimateContextTokensFromSession(session);
-    const tokens = applyTokenEstimateSafetyMultiplier(rawTokens);
-    const thresholdPercent = getCompactionRuntimeConfig().thresholdPercent;
-    const overheadTokens = getSystemPromptOverheadTokens();
-    const effectiveContextWindow = getEffectiveContextWindow(contextWindow, overheadTokens);
-    const thresholdTokens = getContextThresholdTokens(contextWindow, thresholdPercent, overheadTokens);
+  const readContextUsageSnapshot = (): {
+    tokens: number;
+    rawTokens: number;
+    contextWindow: number;
+    effectiveContextWindow: number;
+    overheadTokens: number;
+    thresholdTokens: number;
+    thresholdPercent: number;
+    hardCeilingTokens: number;
+    hardCeilingReached: boolean;
+    autoCompactionScope: string;
+    autoCompactionScopeTokens: number;
+    autoCompactionScopeLimit: number;
+    autoCompactionWindowOrdinal: number | null;
+    autoCompactionBaselineTokens: number | null;
+    autoCompactionPrefillTokens: number | null;
+    overThreshold: boolean;
+  } | null => {
+    const status = getAutoCompactionTokenStatusForSession(session, chatJid);
+    if (!status) return null;
     return {
-      tokens,
-      rawTokens,
-      contextWindow,
-      effectiveContextWindow,
-      overheadTokens,
-      thresholdTokens,
-      thresholdPercent,
-      overThreshold: tokens > thresholdTokens,
+      tokens: status.contextTokens,
+      rawTokens: status.rawContextTokens,
+      contextWindow: status.contextWindow,
+      effectiveContextWindow: status.effectiveContextWindow,
+      overheadTokens: status.overheadTokens,
+      thresholdTokens: status.tokenStatus.autoCompactionScopeLimit,
+      thresholdPercent: status.thresholdPercent,
+      hardCeilingTokens: status.tokenStatus.fullContextWindowLimit,
+      hardCeilingReached: status.tokenStatus.fullContextWindowLimitReached,
+      autoCompactionScope: status.tokenStatus.scope,
+      autoCompactionScopeTokens: status.tokenStatus.autoCompactionScopeTokens,
+      autoCompactionScopeLimit: status.tokenStatus.autoCompactionScopeLimit,
+      autoCompactionWindowOrdinal: status.tokenStatus.windowOrdinal,
+      autoCompactionBaselineTokens: status.tokenStatus.baselineTokens,
+      autoCompactionPrefillTokens: status.tokenStatus.prefillTokens,
+      overThreshold: status.tokenStatus.tokenLimitReached,
     };
   };
 
@@ -641,6 +681,14 @@ async function runPromptAttempt(
         contextWindow: snapshot.contextWindow,
         thresholdTokens: snapshot.thresholdTokens,
         thresholdPercent: snapshot.thresholdPercent,
+        hardCeilingTokens: snapshot.hardCeilingTokens,
+        hardCeilingReached: snapshot.hardCeilingReached,
+        autoCompactionScope: snapshot.autoCompactionScope,
+        autoCompactionScopeTokens: snapshot.autoCompactionScopeTokens,
+        autoCompactionScopeLimit: snapshot.autoCompactionScopeLimit,
+        autoCompactionWindowOrdinal: snapshot.autoCompactionWindowOrdinal,
+        autoCompactionBaselineTokens: snapshot.autoCompactionBaselineTokens,
+        autoCompactionPrefillTokens: snapshot.autoCompactionPrefillTokens,
         toolName: typeof toolName === "string" ? toolName : null,
         toolErrored: isError === true,
         ...getRunObservabilityDetails(runOptions),
@@ -792,7 +840,7 @@ async function runPromptAttempt(
       // when the LLM tries to issue further tool calls (stopReason === "toolUse").
     }
     if (event.type === "message_end") {
-      publishContextUsageUpdate("message_end", true);
+      const estimateSnapshot = publishContextUsageUpdate("message_end", true);
       const message = (event as { message?: { role?: unknown; content?: unknown; stopReason?: unknown; errorMessage?: unknown; usage?: Record<string, unknown> } }).message;
       if (message?.role === "assistant") {
         const durationMs = activeModelResponse ? Math.max(0, Date.now() - activeModelResponse.startedAt) : null;
@@ -807,6 +855,22 @@ async function runPromptAttempt(
           usage: message.usage ?? null,
           ...getRunObservabilityDetails(runOptions),
         });
+        const actualInputTokens = getUsageInputTokens(message.usage);
+        if (actualInputTokens != null && estimateSnapshot) {
+          options.onInfo?.("Context-token estimator calibration", {
+            operation: "compaction.estimator_calibration",
+            chatJid,
+            model: modelLabel,
+            estimatedContextTokens: estimateSnapshot.tokens,
+            estimatedRawContextTokens: estimateSnapshot.rawTokens,
+            actualInputTokens,
+            deltaTokens: estimateSnapshot.tokens - actualInputTokens,
+            ratio: actualInputTokens > 0 ? estimateSnapshot.tokens / actualInputTokens : null,
+            contextWindow: estimateSnapshot.contextWindow,
+            autoCompactionScope: estimateSnapshot.autoCompactionScope,
+            ...getRunObservabilityDetails(runOptions),
+          });
+        }
         activeModelResponse = null;
       }
       if (message?.role === "assistant" && Array.isArray(message.content)) {
@@ -1024,15 +1088,17 @@ async function runPromptAttempt(
             error: `Prompt completed without emitting an assistant reply before finalization (${detail}).`,
           };
 
-        // When context usage is above 60% of the model's window, flag
-        // context pressure on the snapshot so recovery compacts first
-        // instead of retrying into the same wall.
+        // Flag context pressure on the snapshot so recovery compacts first
+        // instead of retrying into the same wall. Reuse the shared scoped
+        // token-status helper so body-after-prefix and hard-ceiling semantics
+        // match pre-prompt/idle compaction decisions.
         try {
-          const tokens = applyTokenEstimateSafetyMultiplier(estimateContextTokensFromSession(session));
-          const cw = getModelContextWindow(session) ?? getUnknownModelContextWindow();
-          const threshold = getContextThresholdTokens(cw, 60, getSystemPromptOverheadTokens());
-          if (cw > 0 && tokens > threshold) {
+          const status = getAutoCompactionTokenStatusForSession(session, chatJid);
+          if (status?.tokenStatus.tokenLimitReached) {
             sawCompactionIntent = true;
+          } else if (status) {
+            const pressureThreshold = getContextThresholdTokens(status.contextWindow, 60, getSystemPromptOverheadTokens());
+            if (status.contextTokens > pressureThreshold) sawCompactionIntent = true;
           }
         } catch (err) { debugSuppressedError(log, "Failed to estimate context tokens for compaction heuristic; skipping pressure check.", err); }
       } else {
@@ -1102,6 +1168,7 @@ export async function runAgentPrompt(
     });
     if (!runOptions.skipPrePromptCompaction) {
       let prePromptCompactionFailure: string | null = null;
+      const projectedPendingInputTokens = estimatePendingInputTokens(prompt);
       await maybeAutoCompactSessionBeforePrompt(session, chatJid, options, (event) => {
         const eventAny = event as { type?: string; errorMessage?: unknown };
         if (eventAny.type === "compaction_start") {
@@ -1119,7 +1186,7 @@ export async function runAgentPrompt(
           if (errorMessage) prePromptCompactionFailure = errorMessage;
         }
         runOptions.onEvent?.(event);
-      });
+      }, projectedPendingInputTokens);
       if (prePromptCompactionFailure && !isCompactionCancellationError(prePromptCompactionFailure)) {
         const rotation = await rotateSession(session, runtime, {
           reason: "automatic",
@@ -1130,6 +1197,11 @@ export async function runAgentPrompt(
           clearCompactionFailureBackoff(chatJid);
           resetCompactionSuccessCount(chatJid);
           session = runtime.session;
+          noteCompactionSuccess(session, chatJid, "rotation", {
+            ...options,
+            countSuccess: false,
+            clearBackoff: false,
+          });
           modelLabel = session.model ? `${session.model.provider}/${session.model.id}` : null;
           updateSessionModel(chatJid, modelLabel, session.thinkingLevel ?? null);
           options.onWarn?.("Emergency-rotated session after pre-prompt compaction failure", {

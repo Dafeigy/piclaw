@@ -18,9 +18,9 @@ import { createLogger, debugSuppressedError } from "../../utils/logger.js";
 import { killTrackedProcesses } from "../../utils/process-tracker.js";
 import { pruneOrphanToolResults } from "../../agent-pool/orphan-tool-results.js";
 import {
-  clearCompactionFailureBackoff,
   isCompactionCancellationError,
   noteCompactionFailure,
+  noteCompactionSuccess,
   runCompactionWithTimeout,
 } from "../../agent-pool/compaction.js";
 
@@ -181,7 +181,11 @@ export async function handleCompact(session: AgentSession, command: CompactComma
       };
     }
 
-    clearCompactionFailureBackoff(chatJid);
+    noteCompactionSuccess(session, chatJid, "manual", {
+      onInfo: (message, details) => log.info(message, details),
+      onWarn: (message, details) => log.warn(message, details),
+      countSuccess: false,
+    });
     const generatedAt = new Date().toISOString();
     const attachmentId = createCompactReportAttachment(
       compactionResult.result.summary,

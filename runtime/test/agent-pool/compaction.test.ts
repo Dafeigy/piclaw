@@ -4,7 +4,9 @@ import "../helpers.js";
 import {
   computeAutoCompactionTokenStatus,
   estimateContextTokensFromSession,
+  getAutoCompactionTokenStatusForSession,
   maybeAutoCompactSessionBeforePrompt,
+  noteCompactionSuccess,
   runCompactionWithTimeout,
 } from "../../src/agent-pool/compaction.js";
 import { getChatAutoCompactionWindow, initDatabase, setChatCompactionBackoff } from "../../src/db.js";
@@ -59,6 +61,50 @@ test("computeAutoCompactionTokenStatus supports body-after-prefix growth plus ha
   expect(hardCeiling.autoCompactionScopeTokens).toBe(46_000);
   expect(hardCeiling.fullContextWindowLimitReached).toBe(true);
   expect(hardCeiling.tokenLimitReached).toBe(true);
+});
+
+test("shared session token status supports mid-turn scoped checks and hard ceiling", () => {
+  const previousScope = process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+  const previousThreshold = process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+  const previousHardCeiling = process.env.PICLAW_COMPACTION_HARD_CEILING_PERCENT;
+  process.env.PICLAW_AUTO_COMPACTION_SCOPE = "body_after_prefix";
+  process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = "75";
+  process.env.PICLAW_COMPACTION_HARD_CEILING_PERCENT = "95";
+  try {
+    const chatJid = "web:midturn-scoped";
+    let usageTokens = 50_000;
+    let leafId = "leaf-1";
+    const session = {
+      ...makeSession([{ role: "user", content: [{ type: "text", text: "x" }] }], usageTokens),
+      getContextUsage: () => ({ tokens: usageTokens }),
+      sessionManager: {
+        getLeafId: () => leafId,
+        getEntries: () => [leafId],
+        buildSessionContext: () => ({ messages: [{ role: "user", content: [{ type: "text", text: "x" }] }] }),
+      },
+      model: { provider: "test", id: "midturn", contextWindow: 100_000 },
+    };
+    getAutoCompactionTokenStatusForSession(session as any, chatJid);
+
+    usageTokens = 70_000;
+    leafId = "leaf-2";
+    const scoped = getAutoCompactionTokenStatusForSession(session as any, chatJid)!;
+    expect(scoped.tokenStatus.autoCompactionScopeTokens).toBe(22_000);
+    expect(scoped.tokenStatus.tokenLimitReached).toBe(false);
+
+    usageTokens = 95_000;
+    leafId = "leaf-3";
+    const hard = getAutoCompactionTokenStatusForSession(session as any, chatJid)!;
+    expect(hard.tokenStatus.fullContextWindowLimitReached).toBe(true);
+    expect(hard.tokenStatus.tokenLimitReached).toBe(true);
+  } finally {
+    if (previousScope === undefined) delete process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+    else process.env.PICLAW_AUTO_COMPACTION_SCOPE = previousScope;
+    if (previousThreshold === undefined) delete process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+    else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
+    if (previousHardCeiling === undefined) delete process.env.PICLAW_COMPACTION_HARD_CEILING_PERCENT;
+    else process.env.PICLAW_COMPACTION_HARD_CEILING_PERCENT = previousHardCeiling;
+  }
 });
 
 test("body-after-prefix auto-compaction resets the persisted window after success", async () => {
@@ -119,6 +165,70 @@ test("body-after-prefix auto-compaction resets the persisted window after succes
     else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
     if (previousWarning === undefined) delete process.env.PICLAW_COMPACTION_WARNING_THRESHOLD;
     else process.env.PICLAW_COMPACTION_WARNING_THRESHOLD = previousWarning;
+  }
+});
+
+test("noteCompactionSuccess resets scoped baseline for manual/model/recovery compactions without incrementing warning counters", () => {
+  const previousScope = process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+  process.env.PICLAW_AUTO_COMPACTION_SCOPE = "body_after_prefix";
+  try {
+    for (const reason of ["manual", "model_downshift", "recovery"] as const) {
+      const chatJid = `web:${reason}-finalizer`;
+      let usageTokens = 80_000;
+      const session = {
+        ...makeSession([{ role: "user", content: [{ type: "text", text: "x" }] }], usageTokens),
+        getContextUsage: () => ({ tokens: usageTokens }),
+        model: { provider: "test", id: reason, contextWindow: 100_000 },
+      };
+
+      expect(getAutoCompactionTokenStatusForSession(session as any, chatJid)?.tokenStatus.prefillTokens).toBe(88_000);
+      usageTokens = 12_000;
+      const finalized = noteCompactionSuccess(session as any, chatJid, reason, { countSuccess: false });
+
+      expect(finalized.ordinal).toBe(2);
+      expect(finalized.prefillTokens).toBe(13_200);
+      expect(finalized.successCount).toBe(0);
+      expect(getAutoCompactionTokenStatusForSession(session as any, chatJid)?.tokenStatus.autoCompactionScopeTokens).toBe(0);
+    }
+  } finally {
+    if (previousScope === undefined) delete process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+    else process.env.PICLAW_AUTO_COMPACTION_SCOPE = previousScope;
+  }
+});
+
+test("maybeAutoCompactSessionBeforePrompt uses pending input projection", async () => {
+  const previousScope = process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+  const previousThreshold = process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+  process.env.PICLAW_AUTO_COMPACTION_SCOPE = "total";
+  process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = "75";
+  try {
+    let compactCalls = 0;
+    const session = {
+      ...makeSession([{ role: "user", content: [{ type: "text", text: "near threshold" }] }], 65_000),
+      model: { provider: "test", id: "pending-projection", contextWindow: 100_000 },
+      settingsManager: { getCompactionSettings: () => ({ enabled: true, reserveTokens: 25_000 }) },
+      isStreaming: false,
+      isCompacting: false,
+      isRetrying: false,
+      async compact() {
+        compactCalls += 1;
+      },
+    };
+
+    await maybeAutoCompactSessionBeforePrompt(
+      session as any,
+      "web:pending-projection",
+      { onWarn: () => undefined, onInfo: () => undefined },
+      () => undefined,
+      10_000,
+    );
+
+    expect(compactCalls).toBe(1);
+  } finally {
+    if (previousScope === undefined) delete process.env.PICLAW_AUTO_COMPACTION_SCOPE;
+    else process.env.PICLAW_AUTO_COMPACTION_SCOPE = previousScope;
+    if (previousThreshold === undefined) delete process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT;
+    else process.env.PICLAW_COMPACTION_THRESHOLD_PERCENT = previousThreshold;
   }
 });
 

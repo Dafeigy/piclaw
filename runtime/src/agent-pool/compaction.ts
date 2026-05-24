@@ -39,6 +39,16 @@ const activeCompactions = new Map<string, ActiveCompaction>();
 
 type AutoCompactionReason = "threshold" | "idle";
 
+export type CompactionSuccessReason = "threshold" | "idle" | "manual" | "model_switch" | "model_downshift" | "recovery" | "rotation" | string;
+
+export interface CompactionSuccessFinalizeOptions extends Pick<CompactionLifecycleOptions, "onInfo" | "onWarn"> {
+  onEvent?: (event: AgentSessionEvent) => void;
+  /** Increment repeated-compaction counters and emit threshold warnings. Defaults to false. */
+  countSuccess?: boolean;
+  /** Reset the failure backoff after success. Defaults to true. */
+  clearBackoff?: boolean;
+}
+
 function estimateMessageTokens(message: any): number {
   if (!message || typeof message !== "object") return 0;
 
@@ -167,6 +177,75 @@ export function resetCompactionSuccessCount(chatJid: string): void {
       chatJid,
     });
   }
+}
+
+function shouldEmitRepeatedCompactionWarning(previousWarnedCount: number, nextSuccessCount: number, warningThreshold: number): boolean {
+  return warningThreshold > 0 && nextSuccessCount >= warningThreshold && previousWarnedCount < warningThreshold;
+}
+
+export function noteCompactionSuccess(
+  session: AgentSession,
+  chatJid: string,
+  reason: CompactionSuccessReason,
+  options: CompactionSuccessFinalizeOptions = {},
+): ChatAutoCompactionWindowState {
+  if (options.clearBackoff !== false) clearCompactionFailureBackoff(chatJid);
+
+  const previousWindow = getChatAutoCompactionWindow(chatJid);
+  const countSuccess = options.countSuccess === true;
+  const prevVolatileCount = compactionSuccessCounters.get(chatJid) ?? 0;
+  const nextSuccessCount = countSuccess ? previousWindow.successCount + 1 : previousWindow.successCount;
+  if (countSuccess) compactionSuccessCounters.set(chatJid, prevVolatileCount + 1);
+
+  clearContextEstimateCache(session);
+  const postRawContextTokens = estimateContextTokensFromSession(session);
+  const postContextTokens = applyTokenEstimateSafetyMultiplier(postRawContextTokens);
+  const nextWindow = resetChatAutoCompactionWindow(chatJid, postContextTokens, {
+    successCount: nextSuccessCount,
+    warnedCount: previousWindow.warnedCount,
+  });
+
+  options.onInfo?.("Compaction success finalized", {
+    operation: "compaction.success_finalizer",
+    chatJid,
+    reason,
+    countSuccess,
+    compactionCount: nextSuccessCount,
+    volatileCompactionCount: countSuccess ? prevVolatileCount + 1 : prevVolatileCount,
+    postRawContextTokens,
+    postContextTokens,
+    autoCompactionWindowOrdinal: nextWindow.ordinal,
+    autoCompactionBaselineTokens: nextWindow.baselineTokens,
+    autoCompactionPrefillTokens: nextWindow.prefillTokens,
+  });
+
+  if (countSuccess) {
+    const warningThreshold = getCompactionRuntimeConfig().warningThreshold;
+    if (shouldEmitRepeatedCompactionWarning(previousWindow.warnedCount, nextSuccessCount, warningThreshold)) {
+      const warnedWindow = setChatAutoCompactionWindow(chatJid, {
+        ...nextWindow,
+        warnedCount: nextSuccessCount,
+      });
+      const detail = `This chat has auto-compacted ${nextSuccessCount} times. If this keeps happening, consider rotating the session or switching to a larger context model.`;
+      options.onWarn?.("Repeated auto-compaction warning", {
+        operation: "compaction.success_finalizer.repeated_warning",
+        chatJid,
+        reason,
+        compactionCount: nextSuccessCount,
+        warningThreshold,
+      });
+      options.onEvent?.({
+        type: "compaction_warning",
+        reason: "repeated_successes",
+        compactionCount: nextSuccessCount,
+        warningThreshold,
+        detail,
+      } as unknown as AgentSessionEvent);
+      return warnedWindow;
+    }
+  }
+
+  return nextWindow;
 }
 
 export const DEFAULT_FALLBACK_CONTEXT_WINDOW = getUnknownModelContextWindow();
@@ -437,12 +516,71 @@ export function computeAutoCompactionTokenStatus(input: {
   };
 }
 
-function getAutoCompactionContext(session: AgentSession, chatJid: string, options: Pick<CompactionLifecycleOptions, "onInfo" | "onWarn">, reason: AutoCompactionReason): {
+export interface AutoCompactionSessionTokenStatus {
+  rawContextTokens: number;
+  projectedAdditionalRawTokens: number;
   contextTokens: number;
   contextWindow: number;
+  effectiveContextWindow: number;
+  overheadTokens: number;
   reserveTokens: number;
+  thresholdPercent: number;
+  hardCeilingPercent: number;
   tokenStatus: AutoCompactionTokenStatus;
-} | null {
+}
+
+export function getAutoCompactionTokenStatusForSession(
+  session: AgentSession,
+  chatJid: string,
+  options: { projectedAdditionalRawTokens?: number } = {},
+): AutoCompactionSessionTokenStatus | null {
+  const contextWindow = getModelContextWindow(session) ?? getUnknownModelContextWindow();
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) return null;
+  const rawCurrentTokens = estimateContextTokensFromSession(session);
+  const projectedAdditionalRawTokens = Math.max(0, Math.trunc(Number(options.projectedAdditionalRawTokens) || 0));
+  const rawContextTokens = rawCurrentTokens + projectedAdditionalRawTokens;
+  const contextTokens = applyTokenEstimateSafetyMultiplier(rawContextTokens);
+  const compactionConfig = getCompactionRuntimeConfig();
+  const overheadTokens = getSystemPromptOverheadTokens();
+  const effectiveContextWindow = getEffectiveContextWindow(contextWindow, overheadTokens);
+  let windowState = getChatAutoCompactionWindow(chatJid);
+  if (compactionConfig.autoCompactionScope === "body_after_prefix" && windowState.prefillTokens == null && windowState.baselineTokens == null) {
+    windowState = setChatAutoCompactionWindow(chatJid, {
+      ...windowState,
+      baselineTokens: contextTokens,
+      prefillTokens: contextTokens,
+    });
+  }
+  const tokenStatus = computeAutoCompactionTokenStatus({
+    activeContextTokens: contextTokens,
+    contextWindow,
+    thresholdPercent: compactionConfig.thresholdPercent,
+    hardCeilingPercent: compactionConfig.hardCeilingPercent,
+    overheadTokens,
+    scope: compactionConfig.autoCompactionScope,
+    window: windowState,
+  });
+  return {
+    rawContextTokens,
+    projectedAdditionalRawTokens,
+    contextTokens,
+    contextWindow,
+    effectiveContextWindow,
+    overheadTokens,
+    reserveTokens: contextWindow - tokenStatus.autoCompactionScopeLimit,
+    thresholdPercent: compactionConfig.thresholdPercent,
+    hardCeilingPercent: compactionConfig.hardCeilingPercent,
+    tokenStatus,
+  };
+}
+
+function getAutoCompactionContext(
+  session: AgentSession,
+  chatJid: string,
+  options: Pick<CompactionLifecycleOptions, "onInfo" | "onWarn">,
+  reason: AutoCompactionReason,
+  projectedAdditionalRawTokens = 0,
+): AutoCompactionSessionTokenStatus | null {
   if (session.isStreaming || session.isCompacting || session.isRetrying) return null;
   const reportedContextWindow = getModelContextWindow(session);
   const contextWindow = reportedContextWindow ?? getUnknownModelContextWindow();
@@ -471,30 +609,9 @@ function getAutoCompactionContext(session: AgentSession, chatJid: string, option
     : null;
   if (!settings) return null;
 
-  const rawContextTokens = estimateContextTokensFromSession(session);
-  const contextTokens = applyTokenEstimateSafetyMultiplier(rawContextTokens);
-  const compactionConfig = getCompactionRuntimeConfig();
-  const overheadTokens = getSystemPromptOverheadTokens();
-  const effectiveContextWindow = getEffectiveContextWindow(contextWindow, overheadTokens);
-  let windowState = getChatAutoCompactionWindow(chatJid);
-  if (compactionConfig.autoCompactionScope === "body_after_prefix" && windowState.prefillTokens == null && windowState.baselineTokens == null) {
-    windowState = setChatAutoCompactionWindow(chatJid, {
-      ...windowState,
-      baselineTokens: contextTokens,
-      prefillTokens: contextTokens,
-    });
-  }
-  const tokenStatus = computeAutoCompactionTokenStatus({
-    activeContextTokens: contextTokens,
-    contextWindow,
-    thresholdPercent: compactionConfig.thresholdPercent,
-    hardCeilingPercent: compactionConfig.hardCeilingPercent,
-    overheadTokens,
-    scope: compactionConfig.autoCompactionScope,
-    window: windowState,
-  });
-  const reserveTokens = contextWindow - tokenStatus.autoCompactionScopeLimit;
-  if (!tokenStatus.tokenLimitReached) return null;
+  const status = getAutoCompactionTokenStatusForSession(session, chatJid, { projectedAdditionalRawTokens });
+  if (!status?.tokenStatus.tokenLimitReached) return null;
+  const { rawContextTokens, contextTokens, effectiveContextWindow, overheadTokens, reserveTokens, tokenStatus } = status;
 
   const trigger = tokenStatus.fullContextWindowLimitReached && tokenStatus.autoCompactionScopeTokens < tokenStatus.autoCompactionScopeLimit
     ? "hard_ceiling"
@@ -511,12 +628,13 @@ function getAutoCompactionContext(session: AgentSession, chatJid: string, option
       trigger,
       contextTokens,
       rawContextTokens,
+      projectedAdditionalRawTokens: status.projectedAdditionalRawTokens,
       contextWindow,
       effectiveContextWindow,
       overheadTokens,
       thresholdTokens: tokenStatus.autoCompactionScopeLimit,
-      thresholdPercent: compactionConfig.thresholdPercent,
-      hardCeilingPercent: compactionConfig.hardCeilingPercent,
+      thresholdPercent: status.thresholdPercent,
+      hardCeilingPercent: status.hardCeilingPercent,
       hardCeilingTokens: tokenStatus.fullContextWindowLimit,
       hardCeilingReached: tokenStatus.fullContextWindowLimitReached,
       autoCompactionScope: tokenStatus.scope,
@@ -529,7 +647,7 @@ function getAutoCompactionContext(session: AgentSession, chatJid: string, option
     },
   );
 
-  return { contextTokens, contextWindow, reserveTokens, tokenStatus };
+  return status;
 }
 
 async function maybeAutoCompactSession(
@@ -538,8 +656,9 @@ async function maybeAutoCompactSession(
   options: Pick<CompactionLifecycleOptions, "onInfo" | "onWarn">,
   onEvent: ((event: AgentSessionEvent) => void) | undefined,
   reason: AutoCompactionReason,
+  projectedAdditionalRawTokens = 0,
 ): Promise<void> {
-  const context = getAutoCompactionContext(session, chatJid, options, reason);
+  const context = getAutoCompactionContext(session, chatJid, options, reason, projectedAdditionalRawTokens);
   if (!context) return;
 
   try {
@@ -609,6 +728,7 @@ async function maybeAutoCompactSession(
         chatJid,
         contextTokens: context.contextTokens,
         contextWindow: context.contextWindow,
+        projectedAdditionalRawTokens: context.projectedAdditionalRawTokens,
         reserveTokens: context.reserveTokens,
         autoCompactionScope: context.tokenStatus.scope,
         autoCompactionScopeTokens: context.tokenStatus.autoCompactionScopeTokens,
@@ -682,50 +802,11 @@ async function maybeAutoCompactSession(
       }
       throw new Error(compactionResult.errorMessage);
     }
-    clearCompactionFailureBackoff(chatJid);
-    const prevVolatileCount = compactionSuccessCounters.get(chatJid) ?? 0;
-    const previousWindow = getChatAutoCompactionWindow(chatJid);
-    const nextSuccessCount = previousWindow.successCount + 1;
-    compactionSuccessCounters.set(chatJid, prevVolatileCount + 1);
-    clearContextEstimateCache(session);
-    const postRawContextTokens = estimateContextTokensFromSession(session);
-    const postContextTokens = applyTokenEstimateSafetyMultiplier(postRawContextTokens);
-    const nextWindow = resetChatAutoCompactionWindow(chatJid, postContextTokens, {
-      successCount: nextSuccessCount,
-      warnedCount: previousWindow.warnedCount,
+    noteCompactionSuccess(session, chatJid, reason, {
+      ...options,
+      onEvent,
+      countSuccess: true,
     });
-    options.onInfo?.("Compaction success count incremented", {
-      operation: reason === "idle" ? "schedule_idle_auto_compaction.counter" : "maybe_auto_compact_session_before_prompt.counter",
-      chatJid,
-      compactionCount: nextSuccessCount,
-      volatileCompactionCount: prevVolatileCount + 1,
-      postRawContextTokens,
-      postContextTokens,
-      autoCompactionWindowOrdinal: nextWindow.ordinal,
-      autoCompactionBaselineTokens: nextWindow.baselineTokens,
-      autoCompactionPrefillTokens: nextWindow.prefillTokens,
-    });
-    const warningThreshold = getCompactionRuntimeConfig().warningThreshold;
-    if (warningThreshold > 0 && nextSuccessCount >= warningThreshold && previousWindow.warnedCount < warningThreshold) {
-      setChatAutoCompactionWindow(chatJid, {
-        ...nextWindow,
-        warnedCount: nextSuccessCount,
-      });
-      const detail = `This chat has auto-compacted ${nextSuccessCount} times. If this keeps happening, consider rotating the session or switching to a larger context model.`;
-      options.onWarn?.("Repeated auto-compaction warning", {
-        operation: reason === "idle" ? "schedule_idle_auto_compaction.repeated_warning" : "maybe_auto_compact_session_before_prompt.repeated_warning",
-        chatJid,
-        compactionCount: nextSuccessCount,
-        warningThreshold,
-      });
-      onEvent?.({
-        type: "compaction_warning",
-        reason: "repeated_successes",
-        compactionCount: nextSuccessCount,
-        warningThreshold,
-        detail,
-      } as unknown as AgentSessionEvent);
-    }
     onEvent?.({
       type: "compaction_end",
       reason,
@@ -776,7 +857,8 @@ export async function maybeAutoCompactSessionBeforePrompt(
   chatJid: string,
   options: Pick<CompactionLifecycleOptions, "onInfo" | "onWarn">,
   onEvent?: (event: AgentSessionEvent) => void,
+  projectedAdditionalRawTokens = 0,
 ): Promise<void> {
   cancelScheduledIdleAutoCompaction(chatJid);
-  await maybeAutoCompactSession(session, chatJid, options, onEvent, "threshold");
+  await maybeAutoCompactSession(session, chatJid, options, onEvent, "threshold", projectedAdditionalRawTokens);
 }

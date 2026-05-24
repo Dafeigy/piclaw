@@ -156,6 +156,7 @@ import {
   buildProgressiveCompactionChunks,
   buildTargetContextCompactionInstructions,
   buildTrimmedCompactionRetryPrompt,
+  buildTrimmedProgressiveMergeRetryPrompt,
   clampKeepRecentTokens,
   estimatePostCompactionFit,
   getProgressiveCompactionBudget,
@@ -211,6 +212,25 @@ describe("smart-compaction", () => {
 
   it("registers the session_before_compact handler", () => {
     expect(handler).toBeTypeOf("function");
+  });
+
+  it("trims progressive merge retry prompts by preserving rules and recent summaries", () => {
+    const prompt = [
+      "Merge these ordered intermediate compaction summaries into the final continuity state.",
+      "\nRules:\n- Preserve exact paths.",
+      "\n## Ordered Intermediate Summaries",
+      "older-summary".repeat(20_000),
+      "RECENT-PROGRESSIVE-MARKER",
+    ].join("\n");
+
+    const trimmed = buildTrimmedProgressiveMergeRetryPrompt(prompt, 8_000);
+
+    expect(trimmed).toBeTruthy();
+    expect(trimmed!.length).toBeLessThan(prompt.length);
+    expect(trimmed).toContain("Rules");
+    expect(trimmed).toContain("## Ordered Intermediate Summaries");
+    expect(trimmed).toContain("RECENT-PROGRESSIVE-MARKER");
+    expect(trimmed).toContain("progressive merge material trimmed");
   });
 
   it("trims compaction retry prompts by preserving instructions and recent excerpts", () => {

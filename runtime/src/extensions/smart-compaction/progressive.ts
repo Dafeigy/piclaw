@@ -246,6 +246,28 @@ function buildMergePrompt(input: {
   return sections.join("\n");
 }
 
+function isCompactionInputOverflow(message: string): boolean {
+  return /context\s*(?:length|window)|maximum context|max(?:imum)? tokens|too many tokens|input too large|prompt too large|exceeds.*(?:context|token)|token limit|exceeds safe model budget/i.test(message);
+}
+
+export function buildTrimmedProgressiveMergeRetryPrompt(promptText: string, targetPromptTokens: number): string | null {
+  const targetChars = Math.max(8_000, Math.floor(targetPromptTokens * 4));
+  if (promptText.length <= targetChars) return null;
+  const marker = "\n## Ordered Intermediate Summaries";
+  const markerIndex = promptText.indexOf(marker);
+  const notice = "\n\n… (older/less relevant progressive merge material trimmed after context-overflow; preserve current task continuity and newest active work from the remaining summaries) …\n\n";
+  if (markerIndex < 0) {
+    const headChars = Math.min(Math.floor(targetChars * 0.35), Math.floor(promptText.length * 0.35));
+    const tailChars = Math.max(1_000, targetChars - headChars - notice.length);
+    return `${promptText.slice(0, headChars)}${notice}${promptText.slice(-tailChars)}`;
+  }
+  const headEnd = Math.min(promptText.length, markerIndex + marker.length + 512);
+  const head = promptText.slice(0, headEnd);
+  const tailChars = targetChars - head.length - notice.length;
+  if (tailChars < 1_000) return null;
+  return `${head}${notice}${promptText.slice(-tailChars)}`;
+}
+
 function hasSafeCompactionOutputRoom(model: any, promptText: string, maxTokens: number): boolean {
   try {
     getSafeCompactionMaxTokens(model, promptText, maxTokens);
@@ -264,31 +286,45 @@ async function completeCompactionPrompt(
   maxTokens: number,
   abortSignal: AbortSignal,
 ): Promise<string> {
-  if (abortSignal.aborted) throw new Error("Compaction cancelled");
-  const safeOutput = getSafeCompactionMaxTokens(model, promptText, maxTokens);
-  const response = await completeSimple(
-    model,
-    {
-      systemPrompt: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: [{ type: "text", text: promptText }], timestamp: Date.now() }],
-    },
-    (model as any).reasoning
-      ? { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: auth.apiKey, headers: auth.headers, reasoning: getCompactionReasoningEffort(model) }
-      : { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: auth.apiKey, headers: auth.headers },
-  );
-  if ((response as any).stopReason === "error") {
-    throw new Error((response as any).errorMessage || "Progressive compaction LLM error");
+  const runOnce = async (activePromptText: string): Promise<string> => {
+    if (abortSignal.aborted) throw new Error("Compaction cancelled");
+    const safeOutput = getSafeCompactionMaxTokens(model, activePromptText, maxTokens);
+    const response = await completeSimple(
+      model,
+      {
+        systemPrompt: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: [{ type: "text", text: activePromptText }], timestamp: Date.now() }],
+      },
+      (model as any).reasoning
+        ? { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: auth.apiKey, headers: auth.headers, reasoning: getCompactionReasoningEffort(model) }
+        : { maxTokens: safeOutput.maxTokens, signal: abortSignal, apiKey: auth.apiKey, headers: auth.headers },
+    );
+    if ((response as any).stopReason === "error") {
+      throw new Error((response as any).errorMessage || "Progressive compaction LLM error");
+    }
+    const summary = response.content
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join("\n")
+      .trim();
+    if (summary.length < MIN_SUMMARY_CHARS) {
+      throw new Error("Progressive compaction summary too short");
+    }
+    if (abortSignal.aborted) throw new Error("Compaction cancelled");
+    return summary;
+  };
+
+  try {
+    return await runOnce(promptText);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const contextWindow = getModelContextWindow(model) ?? PROGRESSIVE_FALLBACK_CONTEXT_WINDOW;
+    const trimmedPrompt = isCompactionInputOverflow(message)
+      ? buildTrimmedProgressiveMergeRetryPrompt(promptText, Math.floor(contextWindow * 0.65))
+      : null;
+    if (!trimmedPrompt || trimmedPrompt === promptText || abortSignal.aborted) throw err;
+    return await runOnce(trimmedPrompt);
   }
-  const summary = response.content
-    .filter((c: any) => c.type === "text")
-    .map((c: any) => c.text)
-    .join("\n")
-    .trim();
-  if (summary.length < MIN_SUMMARY_CHARS) {
-    throw new Error("Progressive compaction summary too short");
-  }
-  if (abortSignal.aborted) throw new Error("Compaction cancelled");
-  return summary;
 }
 
 async function mergeProgressiveSummaries(input: {

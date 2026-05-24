@@ -13,6 +13,8 @@ import type { AgentSession, AgentSessionRuntime } from "@earendil-works/pi-codin
 import type { AgentControlCommand, AgentControlResult } from "../agent-control-types.js";
 import { truncateText } from "../agent-control-helpers.js";
 import { rotateSession } from "../../session-rotation.js";
+import { getChatJid } from "../../core/chat-context.js";
+import { noteCompactionSuccess, resetCompactionSuccessCount } from "../../agent-pool/compaction.js";
 
 type SessionNameCommand = Extract<AgentControlCommand, { type: "session_name" }>;
 type NewSessionCommand = Extract<AgentControlCommand, { type: "new_session" }>;
@@ -99,6 +101,14 @@ export async function handleSessionRotate(session: AgentSession, runtime: AgentS
     reason: "manual",
     fallbackOnCompactionFailure: true,
   });
+  if (result.status === "success") {
+    const chatJid = getChatJid("control:/session-rotate");
+    resetCompactionSuccessCount(chatJid);
+    noteCompactionSuccess(runtime.session, chatJid, "rotation", {
+      countSuccess: false,
+      clearBackoff: false,
+    });
+  }
   return {
     status: result.status,
     message: result.message,
