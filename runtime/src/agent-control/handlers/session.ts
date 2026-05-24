@@ -7,6 +7,8 @@
  * Consumers: agent-control-handlers.ts dispatches to these handlers.
  */
 
+import { existsSync, appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type { AgentSession, AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 import type { AgentControlCommand, AgentControlResult } from "../agent-control-types.js";
 import { truncateText } from "../agent-control-helpers.js";
@@ -45,7 +47,37 @@ export async function handleNewSession(session: AgentSession, runtime: AgentSess
   if (result.cancelled) {
     return { status: "error", message: "New session cancelled." };
   }
+  // Eagerly flush the new session header to disk so the file exists
+  // immediately for session pickers and survives runtime eviction.
+  // The SDK defers persistence until the first assistant message, but in
+  // web mode the runtime may be evicted before the user sends a follow-up.
+  ensureSessionFileOnDisk(runtime.session);
   return { status: "success", message: "Started a new session." };
+}
+
+/**
+ * If the session file hasn't been written to disk yet, write the header
+ * and any initial entries so the file is discoverable by session pickers
+ * and `continueRecent()` after pool eviction.
+ *
+ * Note: The SDK's SessionManager._persist() will later append all fileEntries
+ * again when the first assistant message arrives (since its internal `flushed`
+ * flag resets on each non-assistant append). This creates benign duplicate
+ * entries in the file that are safely deduplicated by ID on reload and cleaned
+ * up on the next compaction/rewrite.
+ */
+function ensureSessionFileOnDisk(session: AgentSession): void {
+  const sm = session.sessionManager;
+  if (!sm || typeof sm.getSessionFile !== "function") return;
+  if (typeof sm.isPersisted === "function" && !sm.isPersisted()) return;
+  const filePath = sm.getSessionFile();
+  if (!filePath || existsSync(filePath)) return;
+  const header = sm.getHeader();
+  if (!header) return;
+  const dir = dirname(filePath);
+  mkdirSync(dir, { recursive: true });
+  // Write only the header — minimal content for isValidSessionFile() to pass.
+  appendFileSync(filePath, JSON.stringify(header) + "\n");
 }
 
 /** Handle /switch-session: switch to an existing session by path. */
