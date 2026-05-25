@@ -39,7 +39,19 @@
 
     .compose-box textarea {
         min-height: 50px;
+        max-height: min(30vh, 200px);
         font-size: var(--chat-content-font-size);
+    }
+
+    .compose-resize-handle {
+        height: 8px;
+        margin-top: -2px;
+        margin-bottom: 0;
+    }
+
+    .compose-resize-handle::before {
+        width: 28px;
+        height: 3px;
     }
 
     .compose-session-trigger-top {
