@@ -949,7 +949,7 @@ describe("smart-compaction", () => {
       expect(prompts.at(-1)).toContain("Ordered Intermediate Summaries");
     });
 
-    it("aborts progressive mode when merge passes make no reduction (loop guard)", async () => {
+    it("falls back to built-in compaction when progressive merge passes make no reduction", async () => {
       const longMessages: any[] = [];
       for (let i = 0; i < 80; i++) {
         longMessages.push(userMsg(`Loop-guard continuity fact ${i}: ${"x".repeat(700)}`));
@@ -984,9 +984,42 @@ describe("smart-compaction", () => {
         ctx,
       );
 
-      expect(result).toEqual({ cancel: true });
+      expect(result).toBeUndefined();
       expect((completeSimple as any).mock.calls.length).toBeLessThan(25);
       expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(expect.stringContaining("progressive iterative mode"));
+    });
+
+    it("cancels instead of falling back when progressive time budget is exhausted", async () => {
+      const longMessages: any[] = [];
+      for (let i = 0; i < 80; i++) {
+        longMessages.push(userMsg(`Timeout continuity fact ${i}: ${"x".repeat(700)}`));
+        longMessages.push(_assistantTextMsg(`Acknowledged timeout fact ${i}.`));
+      }
+
+      const dateSpy = vi.spyOn(Date, "now");
+      let mockedNow = 0;
+      dateSpy.mockImplementation(() => {
+        mockedNow += 4_000_000;
+        return mockedNow;
+      });
+      try {
+        const result = await handler!(
+          {
+            preparation: makePreparation(longMessages.length, {
+              messagesToSummarize: longMessages,
+              tokensBefore: 95_000,
+            }),
+            branchEntries: [],
+            signal: new AbortController().signal,
+          },
+          makeCtx({ model: { provider: "test", id: "small-context", contextWindow: 16_000, reasoning: false } }),
+        );
+
+        expect(result).toEqual({ cancel: true });
+        expect(completeSimple).not.toHaveBeenCalled();
+      } finally {
+        dateSpy.mockRestore();
+      }
     });
   });
 

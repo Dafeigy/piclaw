@@ -499,9 +499,10 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
           };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (abortSignal.aborted || /Compaction cancelled/i.test(msg)) return { cancel: true };
-          log.debug(`Progressive compaction error: ${msg}; not falling back to single-pass because the prompt already exceeds this model's compaction budget`);
-          return { cancel: true };
+          if (abortSignal.aborted || /Compaction cancelled|time budget exhausted/i.test(msg)) return { cancel: true };
+          log.debug(`Progressive compaction error: ${msg}; falling back to built-in compaction`);
+          publishContextEstimate(ctx, tokensBefore, "progressive_builtin_fallback");
+          return;
         }
       }
 
