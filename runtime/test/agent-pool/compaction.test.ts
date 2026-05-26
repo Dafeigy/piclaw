@@ -10,6 +10,7 @@ import {
   runCompactionWithTimeout,
 } from "../../src/agent-pool/compaction.js";
 import { getChatAutoCompactionWindow, initDatabase, setChatCompactionBackoff } from "../../src/db.js";
+import { recordCompactionCancellationReason } from "../../src/agent-pool/compaction-cancel-reason.js";
 
 beforeEach(() => {
   initDatabase();
@@ -239,6 +240,24 @@ test("estimateContextTokensFromSession trusts native usage before compaction", (
   ], 123_456);
 
   expect(estimateContextTokensFromSession(session)).toBe(123_456);
+});
+
+test("runCompactionWithTimeout preserves extension-recorded cancellation reasons", async () => {
+  const previousTimeout = process.env.PICLAW_COMPACTION_TIMEOUT_MS;
+  process.env.PICLAW_COMPACTION_TIMEOUT_MS = "5000";
+  try {
+    const session = makeSession([]);
+    recordCompactionCancellationReason(session.sessionManager, "Smart compaction summary too short");
+
+    const result = await runCompactionWithTimeout(session, "web:recorded-cancel", {}, async () => {
+      throw new Error("Compaction cancelled");
+    });
+
+    expect(result).toEqual({ ok: false, errorMessage: "Smart compaction summary too short" });
+  } finally {
+    if (previousTimeout === undefined) delete process.env.PICLAW_COMPACTION_TIMEOUT_MS;
+    else process.env.PICLAW_COMPACTION_TIMEOUT_MS = previousTimeout;
+  }
 });
 
 test("runCompactionWithTimeout joins concurrent compaction calls for the same chat", async () => {

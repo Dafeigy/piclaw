@@ -14,6 +14,7 @@ import type { Message } from "@earendil-works/pi-ai";
 import { resolveModelRequestAuth } from "../utils/model-auth.js";
 import { createLogger } from "../utils/logger.js";
 import { applyTokenEstimateSafetyMultiplier, getEffectiveContextWindow } from "../utils/context-window-budget.js";
+import { recordCompactionCancellationReason } from "../agent-pool/compaction-cancel-reason.js";
 
 import { getCompactionRuntimeConfig } from "../core/config.js";
 import { FULL_PASS_FALLBACK_MAX_PROMPT_TOKENS, MIN_COMPACTION_OUTPUT_TOKENS, MIN_SUMMARY_CHARS, PROGRESSIVE_FALLBACK_CONTEXT_WINDOW, SELECTIVE_THRESHOLD, SYSTEM_PROMPT_OVERHEAD_TOKENS } from "./smart-compaction/config.js";
@@ -67,6 +68,11 @@ type ResilientCtx<T> = Omit<T, "ui"> & { ui: T extends { ui: infer U } ? U : nev
 
 function makeResilientCtx<T extends { ui: Record<string, unknown> }>(ctx: T): ResilientCtx<T> {
   return Object.create(ctx, { ui: { get: () => resilientUi(ctx), configurable: true } });
+}
+
+function cancelCompactionWithReason(ctx: { sessionManager?: unknown }, message: string): { cancel: true } {
+  recordCompactionCancellationReason(ctx.sessionManager, message);
+  return { cancel: true };
 }
 
 function estimateEntryTokens(entry: any): number {
@@ -499,7 +505,11 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
           };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (abortSignal.aborted || /Compaction cancelled|time budget exhausted/i.test(msg)) return { cancel: true };
+          if (abortSignal.aborted || /Compaction cancelled/i.test(msg)) return { cancel: true };
+          if (/time budget exhausted/i.test(msg) || !fullPassFallbackAllowed) {
+            log.debug(`Progressive compaction failed without a safe built-in fallback: ${msg}`);
+            return cancelCompactionWithReason(ctx, msg);
+          }
           log.debug(`Progressive compaction error: ${msg}; falling back to built-in compaction`);
           publishContextEstimate(ctx, tokensBefore, "progressive_builtin_fallback");
           return;
@@ -561,10 +571,12 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         }
 
         if (response.stopReason === "error") {
+          const errorMessage = (response as any).errorMessage || "unknown";
           log.debug(
-            `Smart compaction LLM error: ${(response as any).errorMessage || "unknown"}`,
+            `Smart compaction LLM error: ${errorMessage}`,
           );
-          return fullPassFallbackAllowed ? undefined : { cancel: true };
+          if (fullPassFallbackAllowed) return undefined;
+          return cancelCompactionWithReason(ctx, `Smart compaction LLM error: ${errorMessage}`);
         }
 
         const summary = response.content
@@ -577,9 +589,10 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
           log.debug(
             fullPassFallbackAllowed
               ? "Smart compaction summary too short, falling back to built-in"
-              : "Smart compaction summary too short; cancelling instead of falling back to unsafe full-pass compaction",
+              : "Smart compaction summary too short; failing instead of falling back to unsafe full-pass compaction",
           );
-          return fullPassFallbackAllowed ? undefined : { cancel: true };
+          if (fullPassFallbackAllowed) return undefined;
+          return cancelCompactionWithReason(ctx, "Smart compaction summary too short");
         }
 
         if (abortSignal.aborted) return { cancel: true };
@@ -639,11 +652,12 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         if (!abortSignal.aborted) {
           log.debug(`Smart compaction error: ${msg}`);
         }
-        // If aborted or our safety checks prove the compacted result still
-        // cannot fit this model, cancel instead of falling through to the
-        // built-in full-pass compactor (which would use an even larger prompt
-        // and can re-enter the same overflow path on lower-context models).
-        if (abortSignal.aborted || /Compaction result still exceeds|exceeds safe model budget/i.test(msg) || !fullPassFallbackAllowed) return { cancel: true };
+        // If aborted by the user/session, report an upstream cancellation.
+        // For non-abort safety/LLM failures, cancel with a recorded Piclaw
+        // reason so the managed wrapper can record backoff/emergency-rotate
+        // instead of treating this as a user interrupt.
+        if (abortSignal.aborted || /Compaction cancelled/i.test(msg)) return { cancel: true };
+        if (/Compaction result still exceeds|exceeds safe model budget/i.test(msg) || !fullPassFallbackAllowed) return cancelCompactionWithReason(ctx, msg);
         return; // fall through to built-in only when the full-pass prompt is estimated safe
       }
     } finally {

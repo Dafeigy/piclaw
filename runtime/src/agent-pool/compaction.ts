@@ -18,6 +18,7 @@ import {
   type ChatCompactionBackoffState,
 } from "../db.js";
 import { formatTimeoutDuration } from "./prompt-utils.js";
+import { consumeCompactionCancellationReason } from "./compaction-cancel-reason.js";
 import { updateSessionCompacting } from "../extensions/session-status.js";
 import { applyTokenEstimateSafetyMultiplier, getContextThresholdTokens, getContextWindowFromModel, getEffectiveContextWindow, getSystemPromptOverheadTokens, getUnknownModelContextWindow } from "../utils/context-window-budget.js";
 import { createLogger, debugSuppressedError } from "../utils/logger.js";
@@ -483,7 +484,11 @@ async function runCompactionWithTimeoutExclusive<T>(
     try {
       return { ok: true, result: await runCompact() };
     } catch (error) {
-      return { ok: false, errorMessage: error instanceof Error ? error.message : String(error) };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const recordedReason = isCompactionCancellationError(errorMessage)
+        ? consumeCompactionCancellationReason(session)
+        : null;
+      return { ok: false, errorMessage: recordedReason ?? errorMessage };
     } finally {
       clearContextEstimateCache(session);
       updateSessionCompacting(chatJid, false);
@@ -496,10 +501,16 @@ async function runCompactionWithTimeoutExclusive<T>(
   const compactionOutcome = Promise.resolve()
     .then(() => runCompact())
     .then((result): CompactionOutcome<T> => ({ ok: true, result }))
-    .catch((error): CompactionOutcome<T> => ({
-      ok: false,
-      errorMessage: error instanceof Error ? error.message : String(error),
-    }))
+    .catch((error): CompactionOutcome<T> => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const recordedReason = isCompactionCancellationError(errorMessage)
+        ? consumeCompactionCancellationReason(session)
+        : null;
+      return {
+        ok: false,
+        errorMessage: recordedReason ?? errorMessage,
+      };
+    })
     .finally(() => {
       if (timeoutId) clearTimeout(timeoutId);
       clearContextEstimateCache(session);

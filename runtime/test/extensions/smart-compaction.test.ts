@@ -163,6 +163,7 @@ import {
   getSafeCompactionMaxTokens,
   smartCompaction,
 } from "../../src/extensions/smart-compaction.js";
+import { consumeCompactionCancellationReason } from "../../src/agent-pool/compaction-cancel-reason.js";
 
 describe("smart-compaction", () => {
   let handler: ((event: any, ctx: any) => Promise<any>) | null = null;
@@ -561,13 +562,14 @@ describe("smart-compaction", () => {
     expect(prompt).toContain("keep active work");
   });
 
-  it("cancels instead of falling through to built-in when target-aware single-pass compaction errors", async () => {
+  it("records a real failure reason instead of plain user-cancel when target-aware single-pass compaction errors", async () => {
     (completeSimple as any).mockResolvedValueOnce({
       content: [],
       stopReason: "error",
       errorMessage: "Rate limited",
     });
 
+    const ctx = makeCtx();
     const result = await handler!(
       {
         preparation: makePreparation(60),
@@ -575,10 +577,11 @@ describe("smart-compaction", () => {
         customInstructions: buildTargetContextCompactionInstructions(128_000, "test/target"),
         signal: new AbortController().signal,
       },
-      makeCtx(),
+      ctx,
     );
 
     expect(result).toEqual({ cancel: true });
+    expect(consumeCompactionCancellationReason(ctx)).toBe("Smart compaction LLM error: Rate limited");
   });
 
   it("falls through on LLM error", async () => {
@@ -949,7 +952,7 @@ describe("smart-compaction", () => {
       expect(prompts.at(-1)).toContain("Ordered Intermediate Summaries");
     });
 
-    it("falls back to built-in compaction when progressive merge passes make no reduction", async () => {
+    it("records a real failure reason instead of falling back to unsafe built-in compaction when progressive merge passes make no reduction", async () => {
       const longMessages: any[] = [];
       for (let i = 0; i < 80; i++) {
         longMessages.push(userMsg(`Loop-guard continuity fact ${i}: ${"x".repeat(700)}`));
@@ -984,12 +987,13 @@ describe("smart-compaction", () => {
         ctx,
       );
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ cancel: true });
+      expect(consumeCompactionCancellationReason(ctx)).toContain("Progressive compaction");
       expect((completeSimple as any).mock.calls.length).toBeLessThan(25);
       expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(expect.stringContaining("progressive iterative mode"));
     });
 
-    it("cancels instead of falling back when progressive time budget is exhausted", async () => {
+    it("records a real failure reason instead of plain user-cancel when progressive time budget is exhausted", async () => {
       const longMessages: any[] = [];
       for (let i = 0; i < 80; i++) {
         longMessages.push(userMsg(`Timeout continuity fact ${i}: ${"x".repeat(700)}`));
@@ -1003,6 +1007,7 @@ describe("smart-compaction", () => {
         return mockedNow;
       });
       try {
+        const ctx = makeCtx({ model: { provider: "test", id: "small-context", contextWindow: 16_000, reasoning: false } });
         const result = await handler!(
           {
             preparation: makePreparation(longMessages.length, {
@@ -1012,10 +1017,10 @@ describe("smart-compaction", () => {
             branchEntries: [],
             signal: new AbortController().signal,
           },
-          makeCtx({ model: { provider: "test", id: "small-context", contextWindow: 16_000, reasoning: false } }),
+          ctx,
         );
-
         expect(result).toEqual({ cancel: true });
+        expect(consumeCompactionCancellationReason(ctx, Number.POSITIVE_INFINITY)).toContain("time budget exhausted");
         expect(completeSimple).not.toHaveBeenCalled();
       } finally {
         dateSpy.mockRestore();
