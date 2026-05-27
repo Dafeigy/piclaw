@@ -122,6 +122,23 @@ mcp({ tool: "filesystem_read_file", args: "{\"path\":\"./README.md\"}" })
 
 `args` must be a JSON string.
 
+## Timeout and abort handling
+
+PiClaw ships a built-in `mcp-timeout-patch` extension that wraps every MCP tool call with:
+
+- **Timeout** — if an MCP server does not respond within the deadline, the call fails cleanly with a descriptive error instead of stalling the agent turn indefinitely.
+- **Abort signal forwarding** — if the user cancels or the session is torn down, the pending MCP call is aborted immediately.
+
+The default timeout is **2 minutes** (120 000 ms). Override it with:
+
+```bash
+export PICLAW_MCP_TOOL_TIMEOUT_MS=60000  # 1 minute
+```
+
+Set to `0` to disable the timeout (not recommended).
+
+This patch exists because the upstream `pi-mcp-adapter` (≤ 2.8.0) does not forward the SDK abort signal or apply any timeout to its `callTool()` invocations.
+
 ## Notes
 
 - `pi-mcp-adapter` does not require `mcp-cli`.
