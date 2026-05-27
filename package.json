@@ -128,7 +128,7 @@
     "js-yaml": "4.1.1",
     "katex": "0.16.47",
     "marked": "18.0.3",
-    "pi-mcp-adapter": "2.5.3",
+    "pi-mcp-adapter": "2.8.0",
     "pptxviewjs": "1.1.9",
     "preact": "10.29.1",
     "qrcode-terminal": "0.12.0",

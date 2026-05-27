@@ -56,6 +56,7 @@ import { sessionStatus } from "./session-status.js";
 import { providerResponseDiagnostics } from "./provider-response-diagnostics.js";
 import { postCompactionPrune } from "./post-compaction-prune.js";
 import { contextPrune } from "./context-prune.js";
+import { mcpTimeoutPatch } from "./mcp-timeout-patch.js";
 
 /** Build the built-in extension factory list used for session creation. */
 export function createBuiltinExtensionFactories(options?: {
@@ -87,6 +88,7 @@ export function createBuiltinExtensionFactories(options?: {
     providerResponseDiagnostics,
     postCompactionPrune,
     contextPrune,
+    mcpTimeoutPatch,
   ];
 }
 
