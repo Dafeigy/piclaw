@@ -19,6 +19,15 @@ export function GeneralSection({
     <section className="settings-panel__section">
       <h2 className="settings-panel__section-title">General</h2>
 
+      {data.version && (
+        <div className="settings-panel__field">
+          <label className="settings-panel__label">Version</label>
+          <div className="settings-panel__field-content">
+            <span className="settings-panel__description" style="font-family: var(--font-mono, monospace); font-size: 13px;">piclaw v{data.version}</span>
+          </div>
+        </div>
+      )}
+
       <h3 className="settings-panel__subsection-title">Identity</h3>
 
       <div className="settings-panel__field">

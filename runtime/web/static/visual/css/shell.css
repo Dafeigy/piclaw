@@ -2,6 +2,8 @@
   --bg: #1e1e2e;
   --bg-sidebar: #181825;
   --bg-terminal: #11111b;
+  --bg-code: #11111b;
+  --text-code: #cdd6f4;
   --bg-status: #181825;
   --border: #45475a;
   --text: #cdd6f4;
@@ -93,6 +95,8 @@
     --bg: #ffffff;
     --bg-sidebar: #f5f5f5;
     --bg-terminal: #1e1e2e;
+    --bg-code: #f5f5f5;
+    --text-code: #1e1e1e;
     --bg-status: #e0e0e0;
     --border: #d4d4d4;
     --text: #1e1e1e;
@@ -170,6 +174,40 @@
     --syn-inserted: #40a02b;
     --syn-local: #fe640b;
   }
+}
+
+/* Class-based light override (applied by ThemeProvider for manual toggle) */
+:root.light {
+  --bg-code: #f5f5f5;
+  --text-code: #1e1e1e;
+  --syn-keyword: #8839ef;
+  --syn-operator: #179299;
+  --syn-number: #fe640b;
+  --syn-string: #40a02b;
+  --syn-comment: #6c6f85;
+  --syn-variable: #4c4f69;
+  --syn-variable2: #d20f39;
+  --syn-definition: #1e66f5;
+  --syn-type: #df8e1d;
+  --syn-property: #1e66f5;
+  --syn-label: #df8e1d;
+  --syn-namespace: #8839ef;
+  --syn-macro: #fe640b;
+  --syn-atom: #fe640b;
+  --syn-punctuation: #5c5f77;
+  --syn-meta: #ea76cb;
+  --syn-link: #1e66f5;
+  --syn-heading: #1e66f5;
+  --syn-invalid: #d20f39;
+  --syn-deleted: #d20f39;
+  --syn-inserted: #40a02b;
+  --syn-local: #fe640b;
+}
+
+/* Class-based dark override (applied by ThemeProvider for manual toggle) */
+:root.dark {
+  --bg-code: #11111b;
+  --text-code: #cdd6f4;
 }
 
 html,
@@ -2301,7 +2339,8 @@ body {
 .message-list__content pre {
   font-family: var(--font-mono, 'Fira Mono', monospace);
   font-size: 13px;
-  background: var(--bg-terminal);
+  background: var(--bg-code);
+  color: var(--text-code);
   border-radius: 6px;
   padding: 10px 12px;
   overflow-x: auto;
@@ -2452,7 +2491,8 @@ body {
 }
 
 .message-list__tool-call-body {
-  background: var(--bg-terminal);
+  background: var(--bg-code);
+  color: var(--text-code);
   padding: 8px 10px;
   border-top: 1px solid var(--border);
 }
@@ -5102,7 +5142,7 @@ pre.frontmatter-block {
   justify-content: space-between;
   align-items: center;
   padding: 4px 12px;
-  background: var(--bg-terminal);
+  background: var(--bg-code);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
@@ -5137,7 +5177,7 @@ pre.frontmatter-block {
 
 .code-block__copy:hover {
   background: var(--hover-overlay, var(--overlay-white-07));
-  color: var(--text-primary, #e7e9ea);
+  color: var(--text-code, #e7e9ea);
 }
 
 .code-block__copy[data-copy-state="copied"] {
@@ -5155,7 +5195,7 @@ pre.frontmatter-block {
   border-radius: 0 0 6px 6px;
   min-height: 1.5em;
   overflow-x: auto;
-  background: var(--bg-terminal, #11111b);
+  background: var(--bg-code, #11111b);
   padding: 12px;
 }
 .code-block pre code {
@@ -5163,7 +5203,7 @@ pre.frontmatter-block {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  color: var(--text-primary, #e7e9ea);
+  color: var(--text-code, #cdd6f4);
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   line-height: 1.5;

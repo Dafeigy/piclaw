@@ -54,6 +54,8 @@ export interface Tool {
 }
 
 export interface SettingsData {
+  /* instance info */
+  version?: string;
   /* general */
   assistantName?: string;
   userName?: string;

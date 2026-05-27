@@ -50,9 +50,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
   const theme = useMemo(() => (mode === "dark" ? DARK_THEME : LIGHT_THEME), [mode]);
 
-  // Sync CSS custom properties so CSS-var-based rules track JS theme changes
+  // Sync CSS custom properties and theme class so CSS-var-based rules track JS theme changes
   useEffect(() => {
     const root = document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(mode);
     root.style.setProperty("--bg", theme.bg);
     root.style.setProperty("--bg-sidebar", theme.bgSidebar);
     root.style.setProperty("--bg-terminal", theme.bgTerminal);
@@ -67,7 +69,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     root.style.setProperty("--handle-hover", theme.handleHover);
     root.style.setProperty("--input-bg", theme.inputBg);
     root.style.setProperty("--input-border", theme.inputBorder);
-  }, [theme]);
+  }, [mode, theme]);
 
   const control: ThemeControl = useMemo(() => ({ mode, setMode, toggleMode }), [mode, setMode, toggleMode]);
 
