@@ -12,6 +12,34 @@ function shouldUseIphoneStandaloneComposeInset(runtime = {}): boolean {
   return /iPhone/i.test(userAgent);
 }
 
+function readIphoneStandaloneViewportCompensation(win: any, options: { keyboardActive?: boolean } = {}): number {
+  if (options.keyboardActive) return 0;
+
+  const screenHeight = readCurrentScreenHeight(win);
+  if (!screenHeight || screenHeight <= 0) return 0;
+
+  const viewportHeight = Number(win?.visualViewport?.height || 0);
+  const innerHeight = Number(win?.innerHeight || 0);
+  const candidateHeight = Number.isFinite(viewportHeight) && viewportHeight > 0
+    ? viewportHeight
+    : (Number.isFinite(innerHeight) && innerHeight > 0 ? innerHeight : 0);
+
+  if (!candidateHeight || candidateHeight <= 0) return 0;
+
+  const gap = Math.round(screenHeight - candidateHeight);
+  const maxExpectedGap = Math.max(120, Math.round(screenHeight * 0.2));
+  if (!Number.isFinite(gap) || gap <= 0 || gap > maxExpectedGap) return 0;
+  return gap;
+}
+
+function buildIphoneStandaloneComposeInsetValue(win: any, options: { keyboardActive?: boolean } = {}): string {
+  const compensation = readIphoneStandaloneViewportCompensation(win, options);
+  if (compensation > 0) {
+    return `max(${compensation}px, env(safe-area-inset-bottom, 0px))`;
+  }
+  return 'env(safe-area-inset-bottom, 0px)';
+}
+
 function isTextEntryFocused(doc: any): boolean {
   const active = doc?.activeElement;
   if (!active) return false;
@@ -106,14 +134,17 @@ export function syncStandaloneMobileViewport(runtime = {}, options = {}) {
     return null;
   }
 
+  const textEntryFocused = isTextEntryFocused(doc);
+  const keyboardActive = textEntryFocused && isVirtualKeyboardLikelyVisible(win);
+
   if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: runtime.navigator ?? win.navigator })) {
-    doc.documentElement.style.setProperty('--iphone-standalone-compose-safe-area-bottom', 'env(safe-area-inset-bottom, 0px)');
+    doc.documentElement.style.setProperty(
+      '--iphone-standalone-compose-safe-area-bottom',
+      buildIphoneStandaloneComposeInsetValue(win, { keyboardActive }),
+    );
   } else {
     doc.documentElement.style.removeProperty('--iphone-standalone-compose-safe-area-bottom');
   }
-
-  const textEntryFocused = isTextEntryFocused(doc);
-  const keyboardActive = textEntryFocused && isVirtualKeyboardLikelyVisible(win);
   const height = readViewportHeight({ window: win }, { ignoreStandaloneChromeGap: true, keyboardActive });
   if (keyboardActive) {
     if (height && height > 0) {
@@ -180,7 +211,10 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
   // See docs/PWA.md before changing this path.
   doc.documentElement?.style?.setProperty?.('--app-height', '100vh');
   if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: win.navigator })) {
-    doc.documentElement?.style?.setProperty?.('--iphone-standalone-compose-safe-area-bottom', 'env(safe-area-inset-bottom, 0px)');
+    doc.documentElement?.style?.setProperty?.(
+      '--iphone-standalone-compose-safe-area-bottom',
+      'max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px))',
+    );
   }
 
   let rafId = 0;

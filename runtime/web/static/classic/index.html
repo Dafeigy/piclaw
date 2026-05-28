@@ -76,7 +76,7 @@
                 if (standalone) {
                     document.documentElement.style.setProperty('--app-height', '100vh');
                     if (/iPhone/i.test(navigator.userAgent || '')) {
-                        document.documentElement.style.setProperty('--iphone-standalone-compose-safe-area-bottom', 'env(safe-area-inset-bottom, 0px)');
+                        document.documentElement.style.setProperty('--iphone-standalone-compose-safe-area-bottom', 'max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px))');
                     }
                 }
             } catch(e) {}
