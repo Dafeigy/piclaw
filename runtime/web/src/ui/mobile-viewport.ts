@@ -32,7 +32,7 @@ function readIphoneStandaloneViewportCompensation(win: any, options: { keyboardA
   return gap;
 }
 
-const IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX = 34;
+const IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX = 16;
 
 function isPortraitOrientation(win: any): boolean {
   const innerWidth = Number(win?.innerWidth || 0);
@@ -260,7 +260,7 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
   if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: win.navigator })) {
     doc.documentElement?.style?.setProperty?.(
       '--iphone-standalone-compose-safe-area-bottom',
-      'max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px))',
+      'max(16px, env(safe-area-inset-bottom, 0px))',
     );
   }
 
