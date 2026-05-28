@@ -9,7 +9,8 @@ function shouldUseIphoneStandaloneComposeInset(runtime = {}): boolean {
   if (!shouldUseStandaloneMobileViewportFix(runtime)) return false;
   const nav = runtime.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
   const userAgent = String(nav?.userAgent || '');
-  return /iPhone/i.test(userAgent);
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return true;
+  return String(nav?.platform || '') === 'MacIntel' && Number(nav?.maxTouchPoints || 0) > 1;
 }
 
 function readIphoneStandaloneViewportCompensation(win: any, options: { keyboardActive?: boolean } = {}): number {
@@ -187,7 +188,7 @@ export function syncStandaloneMobileViewport(runtime = {}, options = {}) {
   if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: runtime.navigator ?? win.navigator })) {
     doc.documentElement.style.setProperty(
       '--iphone-standalone-compose-safe-area-bottom',
-      buildIphoneStandaloneComposeInsetValue(win, { keyboardActive }),
+      buildIphoneStandaloneComposeInsetValue(win, doc, { keyboardActive }),
     );
     doc.documentElement.setAttribute('data-iphone-standalone-compose-inset', '1');
   } else {
@@ -295,7 +296,7 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
 
   const scheduleSettledSync = () => {
     scheduleSync();
-    for (const delay of [80, 220, 420]) {
+    for (const delay of [80, 220, 420, 800, 1200]) {
       const timer = win.setTimeout?.(() => {
         timers.delete(timer);
         scheduleSync();
