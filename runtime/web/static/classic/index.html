@@ -77,6 +77,7 @@
                     document.documentElement.style.setProperty('--app-height', '100vh');
                     if (/iPhone/i.test(navigator.userAgent || '')) {
                         document.documentElement.style.setProperty('--iphone-standalone-compose-safe-area-bottom', 'max(16px, env(safe-area-inset-bottom, 0px))');
+                        document.documentElement.setAttribute('data-iphone-standalone-compose-inset', '1');
                     }
                 }
             } catch(e) {}

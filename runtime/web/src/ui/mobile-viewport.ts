@@ -189,8 +189,10 @@ export function syncStandaloneMobileViewport(runtime = {}, options = {}) {
       '--iphone-standalone-compose-safe-area-bottom',
       buildIphoneStandaloneComposeInsetValue(win, { keyboardActive }),
     );
+    doc.documentElement.setAttribute('data-iphone-standalone-compose-inset', '1');
   } else {
     doc.documentElement.style.removeProperty('--iphone-standalone-compose-safe-area-bottom');
+    doc.documentElement.removeAttribute('data-iphone-standalone-compose-inset');
   }
   const height = readViewportHeight({ window: win }, { ignoreStandaloneChromeGap: true, keyboardActive });
   if (keyboardActive) {
@@ -262,6 +264,7 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
       '--iphone-standalone-compose-safe-area-bottom',
       'max(16px, env(safe-area-inset-bottom, 0px))',
     );
+    doc.documentElement?.setAttribute?.('data-iphone-standalone-compose-inset', '1');
   }
 
   let rafId = 0;
@@ -366,5 +369,6 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
     viewport?.removeEventListener?.('resize', scheduleSettledSync);
     viewport?.removeEventListener?.('scroll', resetScroll);
     doc.documentElement?.style?.removeProperty?.('--iphone-standalone-compose-safe-area-bottom');
+    doc.documentElement?.removeAttribute?.('data-iphone-standalone-compose-inset');
   };
 }
