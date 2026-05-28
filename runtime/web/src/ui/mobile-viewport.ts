@@ -207,7 +207,7 @@ export function syncStandaloneMobileViewport(runtime = {}, options = {}) {
     );
     doc.documentElement?.setAttribute?.('data-iphone-standalone-compose-inset', '1');
   } else {
-    doc.documentElement.style.removeProperty('--iphone-standalone-compose-safe-area-bottom');
+    doc.documentElement?.style?.removeProperty?.('--iphone-standalone-compose-safe-area-bottom');
     doc.documentElement?.removeAttribute?.('data-iphone-standalone-compose-inset');
   }
   const height = readViewportHeight({ window: win }, { ignoreStandaloneChromeGap: true, keyboardActive });
@@ -265,6 +265,7 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
 
   const win = runtime.window ?? (typeof window !== 'undefined' ? window : null);
   const doc = runtime.document ?? (typeof document !== 'undefined' ? document : null);
+  const nav = runtime.navigator ?? win?.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
   if (!win || !doc) {
     return () => {};
   }
@@ -275,10 +276,10 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
   // Standalone mode has no URL bar, so 100vh is the stable full-screen unit.
   // See docs/PWA.md before changing this path.
   doc.documentElement?.style?.setProperty?.('--app-height', '100vh');
-  if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: win.navigator })) {
+  if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: nav })) {
     doc.documentElement?.style?.setProperty?.(
       '--iphone-standalone-compose-safe-area-bottom',
-      buildStandaloneComposeInsetBootstrapValue(win),
+      buildStandaloneComposeInsetBootstrapValue({ ...win, navigator: nav }),
     );
     doc.documentElement?.setAttribute?.('data-iphone-standalone-compose-inset', '1');
   }
@@ -299,7 +300,7 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
 
   const runSync = () => {
     rafId = 0;
-    syncStandaloneMobileViewport({ window: win, document: doc });
+    syncStandaloneMobileViewport({ window: win, document: doc, navigator: nav });
   };
 
   const scheduleSync = () => {
