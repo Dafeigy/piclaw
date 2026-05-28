@@ -205,10 +205,10 @@ export function syncStandaloneMobileViewport(runtime = {}, options = {}) {
       '--iphone-standalone-compose-safe-area-bottom',
       buildIphoneStandaloneComposeInsetValue(win, doc, { keyboardActive }),
     );
-    doc.documentElement.setAttribute('data-iphone-standalone-compose-inset', '1');
+    doc.documentElement?.setAttribute?.('data-iphone-standalone-compose-inset', '1');
   } else {
     doc.documentElement.style.removeProperty('--iphone-standalone-compose-safe-area-bottom');
-    doc.documentElement.removeAttribute('data-iphone-standalone-compose-inset');
+    doc.documentElement?.removeAttribute?.('data-iphone-standalone-compose-inset');
   }
   const height = readViewportHeight({ window: win }, { ignoreStandaloneChromeGap: true, keyboardActive });
   if (keyboardActive) {
