@@ -40,6 +40,13 @@ interface AuthStorageLike {
       onPrompt: (prompt: { message: string; placeholder?: string }) => Promise<string>;
       onProgress?: (message: string) => void;
       onManualCodeInput?: () => Promise<string>;
+      onSelect?: (prompt: { message: string; options: Array<{ id: string; label: string }> }) => Promise<string>;
+      onDeviceCode?: (device: {
+        userCode: string;
+        verificationUri: string;
+        intervalSeconds?: number;
+        expiresInSeconds?: number;
+      }) => void;
     },
   ): Promise<void>;
   reload(): void;
@@ -420,6 +427,12 @@ async function startOAuthBackground(
     onAuth: (info) => { authUrl = info.url; instructions = info.instructions || ""; authReceived?.(); },
     onProgress: () => {},
     onPrompt: async () => "",
+    onSelect: async (prompt) => prompt.options[0]?.id || "",
+    onDeviceCode: (device) => {
+      instructions = `Open ${device.verificationUri} and enter code ${device.userCode}.`;
+      authUrl = device.verificationUri;
+      authReceived?.();
+    },
     onManualCodeInput: () => new Promise<string>((resolve, reject) => {
       pendingOAuthInputs.set(providerId, { resolve, reject });
       // Safety timeout — if no card submission arrives within 5 minutes, reject.
