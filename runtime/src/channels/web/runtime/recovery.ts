@@ -16,6 +16,7 @@ import {
   getMessageThreadRootIdById,
   getMessagesSince,
   getPreflightRuns,
+  quarantinePendingManualCompactCommands,
   quarantineStalePreflightRun,
   rollbackInflightRun,
   setChatCompactionBackoff,
@@ -24,6 +25,7 @@ import {
   type AgentReplyState,
   type DeferredQueuedFollowupRecord,
   type InflightRun,
+  type ManualCompactQuarantineRecord,
   type PreflightRun,
   type StalePreflightRecoveryRecord,
 } from "../../../db.js";
@@ -150,6 +152,7 @@ export interface WebRecoveryStore {
   clearChatCompactionActive?(chatJid: string): void;
   getChatCompactionBackoff?(chatJid: string): { failureCount: number; backoffUntil?: string | null; lastErrorMessage?: string | null } | null;
   setChatCompactionBackoff?(chatJid: string, backoff: { failureCount: number; lastFailedAt: string; backoffUntil: string; lastErrorMessage?: string | null }): void;
+  quarantinePendingManualCompactCommands?(chatJid: string, options: { createdAt: string; reason: string; backoffUntil?: string | null }): ManualCompactQuarantineRecord | null;
   quarantineStalePreflightRun?(preflight: PreflightRun, options: { createdAt: string; reason: string; backoffUntil?: string | null }): StalePreflightRecoveryRecord | null;
   clearInflightMarker(chatJid: string): void;
   rollbackInflightRun(chatJid: string, prevTs: string): void;
@@ -185,6 +188,7 @@ const defaultStore: WebRecoveryStore = {
   clearChatCompactionActive,
   getChatCompactionBackoff,
   setChatCompactionBackoff,
+  quarantinePendingManualCompactCommands,
   quarantineStalePreflightRun,
   clearInflightMarker,
   rollbackInflightRun,
@@ -398,14 +402,23 @@ export function recoverInflightRuns(
             if (freshFailureCount >= 3) {
               const freshBackoffUntil = new Date(now + backoffMs).toISOString();
               const detail = `Compaction for ${compaction.chatJid} failed ${freshFailureCount} times (cleared as fresh each restart); entering backoff`;
-              store.setChatCompactionBackoff?.(compaction.chatJid, {
-                failureCount: freshFailureCount,
-                lastFailedAt: recoveredAt,
-                backoffUntil: freshBackoffUntil,
-                lastErrorMessage: detail,
-              });
-              store.clearChatCompactionActive?.(compaction.chatJid);
-              store.clearInflightMarker(compaction.chatJid);
+              const manualCompactQuarantine = compaction.reason === "manual"
+                ? store.quarantinePendingManualCompactCommands?.(compaction.chatJid, {
+                  createdAt: recoveredAt,
+                  reason: detail,
+                  backoffUntil: freshBackoffUntil,
+                }) ?? null
+                : null;
+              if (!manualCompactQuarantine) {
+                store.setChatCompactionBackoff?.(compaction.chatJid, {
+                  failureCount: freshFailureCount,
+                  lastFailedAt: recoveredAt,
+                  backoffUntil: freshBackoffUntil,
+                  lastErrorMessage: detail,
+                });
+                store.clearChatCompactionActive?.(compaction.chatJid);
+                store.clearInflightMarker(compaction.chatJid);
+              }
               log.warn("Repeated fresh compaction failures triggered backoff", {
                 operation: "recover_active_compactions.fresh_backoff",
                 chatJid: compaction.chatJid,
@@ -414,6 +427,8 @@ export function recoverInflightRuns(
                 compactionAgeSeconds: Math.round(compactionAgeMs / 1000),
                 failureCount: freshFailureCount,
                 backoffUntil: freshBackoffUntil,
+                manualCompactSkippedCount: manualCompactQuarantine?.skippedCount ?? 0,
+                manualCompactCursorTs: manualCompactQuarantine?.cursorTs ?? null,
               });
             } else {
               store.setChatCompactionBackoff?.(compaction.chatJid, {
@@ -439,14 +454,23 @@ export function recoverInflightRuns(
           const failureCount = (previous?.failureCount ?? 0) + 1;
           const backoffUntil = new Date(now + backoffMs).toISOString();
           const detail = `Stale ${compaction.reason || "unknown"} compaction recovered after ${Math.round(compactionAgeMs / 1000)}s; clearing active turn and entering compaction backoff`;
-          store.setChatCompactionBackoff?.(compaction.chatJid, {
-            failureCount,
-            lastFailedAt: recoveredAt,
-            backoffUntil,
-            lastErrorMessage: detail,
-          });
-          store.clearChatCompactionActive?.(compaction.chatJid);
-          store.clearInflightMarker(compaction.chatJid);
+          const manualCompactQuarantine = compaction.reason === "manual"
+            ? store.quarantinePendingManualCompactCommands?.(compaction.chatJid, {
+              createdAt: recoveredAt,
+              reason: detail,
+              backoffUntil,
+            }) ?? null
+            : null;
+          if (!manualCompactQuarantine) {
+            store.setChatCompactionBackoff?.(compaction.chatJid, {
+              failureCount,
+              lastFailedAt: recoveredAt,
+              backoffUntil,
+              lastErrorMessage: detail,
+            });
+            store.clearChatCompactionActive?.(compaction.chatJid);
+            store.clearInflightMarker(compaction.chatJid);
+          }
           log.warn("Stale active compaction marker quarantined", {
             operation: "recover_active_compactions.quarantine_stale",
             chatJid: compaction.chatJid,
@@ -456,6 +480,8 @@ export function recoverInflightRuns(
             staleAgeSeconds: Math.round(staleAgeMs / 1000),
             failureCount,
             backoffUntil,
+            manualCompactSkippedCount: manualCompactQuarantine?.skippedCount ?? 0,
+            manualCompactCursorTs: manualCompactQuarantine?.cursorTs ?? null,
           });
         }
       });
