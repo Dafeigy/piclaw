@@ -59,6 +59,7 @@ window.__piclawMarkdownHarness = {
   source,
   view,
   doc: () => view.state.doc.toString(),
+  reset: () => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: source }, selection: { anchor: 0 } }),
   isFrozen: () => view.state.field(livePreviewFrozenField, false),
   focus: () => view.focus(),
   setCursor: (pos) => view.dispatch({ selection: { anchor: pos }, scrollIntoView: true }),
@@ -158,7 +159,198 @@ async function runScenario(page: Page, baseUrl: string, scenario: typeof scenari
     harness.scrollTo(harness.source.indexOf('| Left | Center | Right |'));
   });
   await page.waitForTimeout(150);
-  assert(await count(page, '.cm-md-table-line') >= 1, `${scenario.name}: missing table line decoration`);
+  assert(await count(page, '.cm-md-editable-table') >= 1, `${scenario.name}: missing editable table widget`);
+
+  const tableInteraction = await page.evaluate(async () => {
+    const wait = () => new Promise((resolve) => setTimeout(resolve, 90));
+    const harness = (window as any).__piclawMarkdownHarness;
+    const tableLineCount = (text: string) => text.split('\n').filter((line) => line.startsWith('|')).length;
+    const caretOffset = (cell: HTMLElement) => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return -1;
+      const range = selection.getRangeAt(0).cloneRange();
+      range.selectNodeContents(cell);
+      range.setEnd(selection.anchorNode!, selection.anchorOffset);
+      return range.toString().length;
+    };
+    const setCaret = (cell: HTMLElement, offset: number) => {
+      cell.focus();
+      const text = cell.firstChild ?? cell.appendChild(document.createTextNode(''));
+      const range = document.createRange();
+      range.setStart(text, Math.max(0, Math.min(offset, text.textContent?.length ?? 0)));
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+    const insertAtCaret = (cell: HTMLElement, text: string) => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) throw new Error('missing table cell selection');
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const node = document.createTextNode(text);
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      cell.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+    };
+
+    const cell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="0"]');
+    if (!cell) throw new Error('editable table body cell not found');
+
+    cell.focus();
+    cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await wait();
+    const tabCol = (document.activeElement as HTMLElement | null)?.dataset?.col ?? null;
+    const secondCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="1"]');
+    if (!secondCell) throw new Error('editable table second cell not found');
+    secondCell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    await wait();
+    const shiftTabCol = (document.activeElement as HTMLElement | null)?.dataset?.col ?? null;
+
+    cell.textContent = 'abcdef';
+    setCaret(cell, 3);
+    insertAtCaret(cell, 'X');
+    await wait();
+    const caretAfterMiddleInsert = caretOffset(cell);
+    const caretDoc = harness.doc();
+
+    const pipeCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="1"]');
+    if (!pipeCell) throw new Error('editable table pipe cell not found');
+    pipeCell.textContent = 'pipe value';
+    setCaret(pipeCell, 4);
+    insertAtCaret(pipeCell, ' |');
+    await wait();
+    const pipeCaret = caretOffset(pipeCell);
+    const pipeDoc = harness.doc();
+
+    pipeCell.textContent = 'abcdef';
+    setCaret(pipeCell, 3);
+    const data = new DataTransfer();
+    data.setData('text/plain', 'M\nN');
+    pipeCell.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
+    await wait();
+    const pasteCaret = caretOffset(pipeCell);
+    const pasteDoc = harness.doc();
+
+    const compositionCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="2"]');
+    if (!compositionCell) throw new Error('editable table composition cell not found');
+    compositionCell.textContent = '';
+    compositionCell.focus();
+    compositionCell.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
+    compositionCell.textContent = 'é';
+    compositionCell.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: 'é' }));
+    await wait();
+    const compositionDocDuring = harness.doc();
+    compositionCell.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'é' }));
+    await wait();
+    const compositionDocAfter = harness.doc();
+
+    cell.focus();
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.cm-md-editable-table-button'));
+    const byText = (text: string) => buttons.find((button) => button.textContent === text);
+    const addRow = byText('+ row');
+    const deleteRow = byText('- row');
+    const addCol = byText('+ col');
+    const deleteCol = byText('- col');
+    const alignCenter = byText('↔');
+    if (!addRow || !deleteRow || !addCol || !deleteCol || !alignCenter) throw new Error('editable table mutation buttons not found');
+
+    alignCenter.click();
+    await wait();
+    const alignDoc = harness.doc();
+
+    const beforeRows = tableLineCount(alignDoc);
+    addRow.click();
+    await wait();
+    const afterAddRowDoc = harness.doc();
+    deleteRow.click();
+    await wait();
+    const afterDeleteRowDoc = harness.doc();
+
+    addCol.click();
+    await wait();
+    const afterAddColDoc = harness.doc();
+    deleteCol.click();
+    await wait();
+    const afterDeleteColDoc = harness.doc();
+    const activeCellAfterMutation = (document.activeElement as HTMLElement | null)?.classList.contains('cm-md-editable-table-cell') ?? false;
+
+    const lastCell = Array.from(document.querySelectorAll<HTMLElement>('.cm-md-editable-table tbody td[data-row][data-col]')).at(-1);
+    if (!lastCell) throw new Error('editable table last cell not found');
+    const beforeTabEndRows = tableLineCount(harness.doc());
+    lastCell.focus();
+    lastCell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await wait();
+    const afterTabEndRows = tableLineCount(harness.doc());
+    const tabEndFocus = {
+      row: (document.activeElement as HTMLElement | null)?.dataset?.row ?? null,
+      col: (document.activeElement as HTMLElement | null)?.dataset?.col ?? null,
+    };
+
+    const contextCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="0"]');
+    if (!contextCell) throw new Error('editable table context cell not found');
+    const beforeContextRows = tableLineCount(harness.doc());
+    contextCell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 30, clientY: 30 }));
+    await wait();
+    const contextVisible = !document.querySelector<HTMLElement>('.cm-md-editable-table-context-menu')?.hidden;
+    const menuAddRow = Array.from(document.querySelectorAll<HTMLButtonElement>('.cm-md-editable-table-menu-button')).find((button) => button.textContent === '+ row');
+    if (!menuAddRow) throw new Error('editable table context add-row missing');
+    menuAddRow.click();
+    await wait();
+    const afterContextRows = tableLineCount(harness.doc());
+
+    return {
+      tabCol,
+      shiftTabCol,
+      caretAfterMiddleInsert,
+      caretDoc,
+      pipeCaret,
+      pipeDoc,
+      pasteCaret,
+      pasteDoc,
+      compositionDocDuring,
+      compositionDocAfter,
+      alignDoc,
+      beforeRows,
+      afterAddRows: tableLineCount(afterAddRowDoc),
+      afterDeleteRows: tableLineCount(afterDeleteRowDoc),
+      addedColumn: afterAddColDoc.includes('Column '),
+      deletedColumn: !afterDeleteColDoc.includes('Column '),
+      activeCellAfterMutation,
+      beforeTabEndRows,
+      afterTabEndRows,
+      tabEndFocus,
+      contextVisible,
+      beforeContextRows,
+      afterContextRows,
+    };
+  });
+  assert(tableInteraction.tabCol === '1', `${scenario.name}: Tab did not move focus to next editable table cell`);
+  assert(tableInteraction.shiftTabCol === '0', `${scenario.name}: Shift-Tab did not move focus to previous editable table cell`);
+  assert(tableInteraction.caretDoc.includes('abcXdef'), `${scenario.name}: editable table middle insert did not serialize`);
+  assert(tableInteraction.caretAfterMiddleInsert === 4, `${scenario.name}: editable table caret offset was not preserved after middle insert`);
+  assert(tableInteraction.pipeDoc.includes('pipe \\| value'), `${scenario.name}: editable table did not escape literal pipe`);
+  assert(tableInteraction.pipeCaret === 6, `${scenario.name}: editable table caret offset was not preserved after pipe insertion`);
+  assert(tableInteraction.pasteDoc.includes('abcM Ndef'), `${scenario.name}: editable table paste did not insert flattened text in the middle`);
+  assert(tableInteraction.pasteCaret === 6, `${scenario.name}: editable table paste caret offset was not preserved`);
+  assert(!tableInteraction.compositionDocDuring.includes('| é |'), `${scenario.name}: editable table serialized during composition`);
+  assert(tableInteraction.compositionDocAfter.includes('| é |'), `${scenario.name}: editable table did not serialize after compositionend`);
+  assert(tableInteraction.alignDoc.includes('| :---: |'), `${scenario.name}: editable table alignment control did not serialize center alignment`);
+  assert(tableInteraction.afterAddRows > tableInteraction.beforeRows, `${scenario.name}: editable table add-row did not serialize`);
+  assert(tableInteraction.afterDeleteRows === tableInteraction.beforeRows, `${scenario.name}: editable table delete-row did not serialize`);
+  assert(tableInteraction.addedColumn, `${scenario.name}: editable table add-column did not serialize`);
+  assert(tableInteraction.deletedColumn, `${scenario.name}: editable table delete-column did not serialize`);
+  assert(tableInteraction.activeCellAfterMutation, `${scenario.name}: editable table did not restore focus after mutation`);
+  assert(tableInteraction.afterTabEndRows > tableInteraction.beforeTabEndRows, `${scenario.name}: Tab at final cell did not append a row`);
+  assert(tableInteraction.tabEndFocus.col === '0', `${scenario.name}: Tab at final cell did not focus first cell of appended row`);
+  assert(tableInteraction.contextVisible, `${scenario.name}: editable table context menu did not open`);
+  assert(tableInteraction.afterContextRows > tableInteraction.beforeContextRows, `${scenario.name}: editable table context-menu row insertion did not serialize`);
+
+  await page.evaluate(() => (window as any).__piclawMarkdownHarness.reset());
+  await page.waitForTimeout(80);
 
   const initialDocMatches = await page.evaluate(() => {
     const harness = (window as any).__piclawMarkdownHarness;

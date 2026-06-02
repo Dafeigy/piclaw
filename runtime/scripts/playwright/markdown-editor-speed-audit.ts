@@ -141,7 +141,7 @@ window.__speedHarness = {
     callouts: document.querySelectorAll('.cm-md-callout').length,
     frontmatter: document.querySelectorAll('.cm-md-frontmatter-line').length,
     images: document.querySelectorAll('.cm-md-image-block,.cm-md-image-wrap').length,
-    tables: document.querySelectorAll('.cm-md-table-line').length,
+    tables: document.querySelectorAll('.cm-md-editable-table,.cm-md-table-line').length,
   }),
   measureTyping: async () => {
     const marker = 'Intro paragraph';
@@ -208,6 +208,43 @@ window.__speedHarness = {
     }
     await nextFrame();
     return { totalMs: performance.now() - start, steps: 80, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight };
+  },
+  measureTableEdit: async () => {
+    const cell = document.querySelector('.cm-md-editable-table tbody td');
+    if (!cell) return { totalMs: Number.NaN, p95Ms: Number.NaN, operations: 0, skipped: 'no editable table' };
+    const times = [];
+    cell.focus();
+    cell.textContent = '';
+    const sample = 'abcdefghijklmnopqrstuvwxyz'.repeat(2);
+    for (const ch of sample) {
+      const start = performance.now();
+      cell.textContent = (cell.textContent || '') + ch;
+      cell.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ch }));
+      times.push(performance.now() - start);
+    }
+    await wait(120);
+    if (view.state.doc.toString() !== source) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: source }, selection: { anchor: 0 } });
+      await nextFrame();
+    }
+    return { totalMs: times.reduce((a, b) => a + b, 0), p95Ms: quantile(times, 0.95), operations: times.length };
+  },
+  measureTableMutation: async () => {
+    const addRow = Array.from(document.querySelectorAll('.cm-md-editable-table-button')).find((button) => button.textContent === '+ row');
+    const addCol = Array.from(document.querySelectorAll('.cm-md-editable-table-button')).find((button) => button.textContent === '+ col');
+    if (!addRow || !addCol) return { totalMs: Number.NaN, operations: 0, skipped: 'no editable table controls' };
+    const times = [];
+    for (const button of [addRow, addCol]) {
+      const start = performance.now();
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      times.push(performance.now() - start);
+      await wait(40);
+    }
+    if (view.state.doc.toString() !== source) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: source }, selection: { anchor: 0 } });
+      await nextFrame();
+    }
+    return { totalMs: times.reduce((a, b) => a + b, 0), operations: times.length };
   },
   measureTableBoundary: async () => {
     const currentDoc = view.state.doc.toString();
@@ -282,10 +319,14 @@ async function runOne(page: Page, baseUrl: string, viewport: typeof viewports[nu
   const pointer = await page.evaluate(() => (window as any).__speedHarness.measurePointerDispatch());
   console.log(`[audit] ${viewport.name}: scroll`);
   const scroll = await page.evaluate(() => (window as any).__speedHarness.measureScroll());
+  console.log(`[audit] ${viewport.name}: table edit`);
+  const tableEdit = await page.evaluate(() => (window as any).__speedHarness.measureTableEdit());
+  console.log(`[audit] ${viewport.name}: table mutation`);
+  const tableMutation = await page.evaluate(() => (window as any).__speedHarness.measureTableMutation());
   console.log(`[audit] ${viewport.name}: table`);
   const table = await page.evaluate(() => (window as any).__speedHarness.measureTableBoundary());
   const docMatchesAfter = await page.evaluate(() => (window as any).__speedHarness.docMatches());
-  return { mountPaintMs, counts, docMatchesBefore, docMatchesAfter, typing, cursor, pointer, scroll, table };
+  return { mountPaintMs, counts, docMatchesBefore, docMatchesAfter, typing, cursor, pointer, scroll, tableEdit, tableMutation, table };
 }
 
 function summarize(samples: RunMetric[]) {
@@ -299,6 +340,9 @@ function summarize(samples: RunMetric[]) {
     pointerTotalMs: { median: round(median(field('pointer.totalMs'))), p95: round(p95(field('pointer.totalMs'))) },
     pointerP95Ms: { median: round(median(field('pointer.p95Ms'))), p95: round(p95(field('pointer.p95Ms'))) },
     scrollTotalMs: { median: round(median(field('scroll.totalMs'))), p95: round(p95(field('scroll.totalMs'))) },
+    tableEditMs: { median: round(median(field('tableEdit.totalMs'))), p95: round(p95(field('tableEdit.totalMs'))) },
+    tableEditP95Ms: { median: round(median(field('tableEdit.p95Ms'))), p95: round(p95(field('tableEdit.p95Ms'))) },
+    tableMutationMs: { median: round(median(field('tableMutation.totalMs'))), p95: round(p95(field('tableMutation.totalMs'))) },
     tableBoundaryMs: { median: round(median(field('table.totalMs'))), p95: round(p95(field('table.totalMs'))) },
     tableSelectedChars: { median: round(median(field('table.selectedChars'))), p95: round(p95(field('table.selectedChars'))) },
     docMatchesBefore: samples.every((s) => s.docMatchesBefore),
@@ -332,7 +376,7 @@ async function runSuite(browser: Browser, label: string, root: string, options: 
 }
 
 function compare(base: any, head: any) {
-  const metrics = ['mountPaintMs', 'typingTotalMs', 'typingP95PerCharMs', 'cursorTotalMs', 'cursorP95Ms', 'pointerTotalMs', 'pointerP95Ms', 'scrollTotalMs', 'tableBoundaryMs'];
+  const metrics = ['mountPaintMs', 'typingTotalMs', 'typingP95PerCharMs', 'cursorTotalMs', 'cursorP95Ms', 'pointerTotalMs', 'pointerP95Ms', 'scrollTotalMs', 'tableEditMs', 'tableEditP95Ms', 'tableMutationMs', 'tableBoundaryMs'];
   const rows: any[] = [];
   for (const viewport of viewports) {
     for (const metric of metrics) {

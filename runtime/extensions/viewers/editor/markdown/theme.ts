@@ -510,6 +510,105 @@ export const markdownPreviewTheme = EditorView.theme({
     '.cm-md-table-line .cm-highlightSpace::before': {
         content: 'none !important',
     },
+    '.cm-md-editable-table-wrap': {
+        position: 'relative',
+        display: 'block',
+        maxWidth: '100%',
+        overflowX: 'auto',
+        margin: '6px 0',
+        padding: '1px 0',
+    },
+    '.cm-md-editable-table-toolbar': {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '4px',
+        margin: '0 0 4px',
+        opacity: '0.72',
+    },
+    '.cm-md-editable-table-wrap:focus-within .cm-md-editable-table-toolbar, .cm-md-editable-table-wrap:hover .cm-md-editable-table-toolbar': {
+        opacity: '1',
+    },
+    '.cm-md-editable-table-button': {
+        border: '1px solid var(--border-color, #333)',
+        borderRadius: '4px',
+        background: 'var(--bg-secondary, #2a2a2a)',
+        color: 'var(--text-secondary, #a0a0a0)',
+        fontSize: '11px',
+        lineHeight: '1.2',
+        padding: '2px 6px',
+        cursor: 'pointer',
+    },
+    '.cm-md-editable-table-button:hover, .cm-md-editable-table-button:focus-visible': {
+        color: 'var(--text-primary, #d6d6d6)',
+        borderColor: 'var(--accent-color, #1d9bf0)',
+        outline: 'none',
+    },
+    '.cm-md-editable-table-context-menu': {
+        position: 'absolute',
+        zIndex: '20',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(56px, auto))',
+        gap: '4px',
+        padding: '6px',
+        border: '1px solid var(--border-color, #333)',
+        borderRadius: '6px',
+        background: 'var(--bg-primary, #1e1e1e)',
+        boxShadow: '0 8px 20px rgba(0, 0, 0, 0.28)',
+    },
+    '.cm-md-editable-table-context-menu[hidden]': {
+        display: 'none',
+    },
+    '.cm-md-editable-table-menu-button': {
+        border: '1px solid var(--border-color, #333)',
+        borderRadius: '4px',
+        background: 'var(--bg-secondary, #2a2a2a)',
+        color: 'var(--text-secondary, #a0a0a0)',
+        fontSize: '11px',
+        padding: '3px 6px',
+        cursor: 'pointer',
+    },
+    '.cm-md-editable-table-menu-button:hover, .cm-md-editable-table-menu-button:focus-visible': {
+        color: 'var(--text-primary, #d6d6d6)',
+        borderColor: 'var(--accent-color, #1d9bf0)',
+        outline: 'none',
+    },
+    '.cm-md-editable-table': {
+        borderCollapse: 'separate',
+        borderSpacing: '0',
+        minWidth: 'min(100%, 420px)',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        fontSize: '0.95em',
+        color: 'var(--text-primary, #d6d6d6)',
+    },
+    '.cm-md-editable-table th, .cm-md-editable-table td': {
+        borderRight: '1px solid var(--border-color, #333)',
+        borderBottom: '1px solid var(--border-color, #333)',
+        padding: '5px 8px',
+        minWidth: '8ch',
+        outline: 'none',
+        whiteSpace: 'pre-wrap',
+    },
+    '.cm-md-editable-table th:first-child, .cm-md-editable-table td:first-child': {
+        borderLeft: '1px solid var(--border-color, #333)',
+    },
+    '.cm-md-editable-table thead th': {
+        borderTop: '1px solid var(--border-color, #333)',
+        backgroundColor: 'var(--bg-secondary, #2a2a2a)',
+        fontWeight: '700',
+    },
+    '.cm-md-editable-table tbody tr:nth-child(odd) td': {
+        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    },
+    '.cm-md-editable-table-cell-left': { textAlign: 'left' },
+    '.cm-md-editable-table-cell-center': { textAlign: 'center' },
+    '.cm-md-editable-table-cell-right': {
+        textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+    },
+    '.cm-md-editable-table-cell:focus': {
+        boxShadow: 'inset 0 0 0 2px var(--accent-color, #1d9bf0)',
+        backgroundColor: 'rgba(29, 155, 240, 0.12) !important',
+    },
 
     /* ── Links ── */
     '.cm-md-link': {

@@ -19,7 +19,6 @@ import './checkbox.js';
 import './link.js';
 import './list.js';
 import './blockquote.js';
-import './table.js';
 import './frontmatter.js';
 import './footnote.js';
 import './tag.js';
@@ -30,6 +29,7 @@ import { markdownPreviewTheme } from './theme.js';
 import { livePreviewCursorNav } from './cursor-nav.js';
 import { autoCloseCodeFence, extendEmphasisPair, tightListEnterKeymap } from './edit-helpers.js';
 import { imageBlocks } from './image-block.js';
+import { editableTables } from './table-editor.js';
 import { livePreviewTableKeymap } from './table-keymap.js';
 
 // Parser extensions (for markdown() config)
@@ -63,6 +63,7 @@ export const markdownLivePreview: Extension = [
     livePreviewFrozenField,
     livePreviewPointerFreeze,
     imageBlocks(),
+    editableTables(),
     livePreviewPlugin,
 
     livePreviewCursorNav,
