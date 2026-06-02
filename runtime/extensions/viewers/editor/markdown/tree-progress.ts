@@ -52,7 +52,12 @@ class TreeProgressPlugin {
     private destroyed = false;
 
     constructor(private readonly view: EditorView) {
-        this.lastTreeLength = syntaxTree(view.state).length;
+        // Start from zero rather than the current tree length so StateFields
+        // created earlier in the same extension reconfiguration get one
+        // post-attach rebuild even if Lezer completed parsing before this
+        // ViewPlugin constructor ran. Otherwise fields that cached a partial
+        // tree during create() can stay stale forever.
+        this.lastTreeLength = 0;
         this.schedule();
     }
 
