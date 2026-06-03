@@ -292,15 +292,12 @@ test('core terminal renderer is the xterm implementation, not the optional Ghost
     expect(terminalTabPaneExtension.label).toBe('Terminal');
 });
 
-test('terminal uses a 2px overlay scrollbar instead of the native xterm scrollbar gutter', () => {
+test('terminal uses xterm overviewRuler width to size the native scrollbar', () => {
     const source = readFileSync(new URL('../../web/src/panes/terminal-pane.ts', import.meta.url), 'utf8');
-    expect(source).toContain('scrollbar-width: none;');
-    expect(source).toContain('width: 0;');
-    expect(source).toContain('className = "terminal-scrollbar-thumb"');
-    expect(source).toContain('.xterm-scrollable-element > .scrollbar.vertical');
-    expect(source).toContain('width: 2px !important;');
-    expect(source).toContain('width: 2px;');
-    expect(source).toContain('syncOverlayScrollbar()');
+    expect(source).toContain('overviewRuler: { width: 2 },');
+    expect(source).not.toContain('terminal-scrollbar-thumb');
+    expect(source).not.toContain('syncOverlayScrollbar');
+    expect(source).not.toContain('.xterm-scrollable-element > .scrollbar.vertical');
 });
 
 test('getOrCreateAnonymousTerminalClientToken persists a stable client token', () => {
