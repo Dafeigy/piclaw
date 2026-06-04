@@ -219,6 +219,7 @@ const LIVE_PREVIEW_DEBOUNCE_MS = 300;
 const LIVE_PREVIEW_FREEZE_TAIL_MS = 100;
 
 export const setLivePreviewFrozen = StateEffect.define<boolean>();
+export const forceLivePreviewRebuild = StateEffect.define<void>();
 
 export const livePreviewFrozenField = StateField.define<boolean>({
     create: () => false,
@@ -239,6 +240,12 @@ function transactionHasFreezeEffect(update: ViewUpdate): boolean {
 function transactionHasTreeGrowthEffect(update: ViewUpdate): boolean {
     return update.transactions.some((transaction) =>
         transaction.effects.some((effect) => effect.is(treeGrowthEffect)),
+    );
+}
+
+function transactionHasForceRebuildEffect(update: ViewUpdate): boolean {
+    return update.transactions.some((transaction) =>
+        transaction.effects.some((effect) => effect.is(forceLivePreviewRebuild)),
     );
 }
 
@@ -397,6 +404,7 @@ class LivePreviewPlugin {
         const frozen = update.state.field(livePreviewFrozenField, false);
         const freezeReleased = transactionHasFreezeEffect(update) && !frozen;
         const treeGrew = transactionHasTreeGrowthEffect(update);
+        const forceRebuild = transactionHasForceRebuildEffect(update);
         const selectionIsCollapsed = update.state.selection.ranges.every((range) => range.empty);
         const selectionTouchesViewport = update.selectionSet && (
             selectionTouchesVisibleRange(update.view, update.startState) ||
@@ -406,6 +414,7 @@ class LivePreviewPlugin {
 
         const needsRebuild =
             update.docChanged ||
+            forceRebuild ||
             treeGrew ||
             freezeReleased ||
             (!frozen && (
@@ -424,14 +433,22 @@ class LivePreviewPlugin {
                 ? normalizeReplaceDecorationSet(mappedDecorations, update.state.doc)
                 : mappedDecorations;
             if (this.rebuildTimer !== null) clearTimeout(this.rebuildTimer);
+            if (forceRebuild) {
+                this.decorations = this.buildDecorations(update.view);
+                return;
+            }
             this.rebuildTimer = setTimeout(() => {
                 this.rebuildTimer = null;
                 if (this.destroyed) return;
-                this.decorations = this.buildDecorations(this.view);
-                // Nudge CM to read the updated decorations via a minimal
-                // requestMeasure — avoids dispatch({ effects: [] }) infinite loop.
-                this.view.requestMeasure();
+                try {
+                    this.view.dispatch({ effects: forceLivePreviewRebuild.of() });
+                } catch (error) {
+                    console.debug('[editor/live-preview] ignored delayed rebuild after view disposal', error);
+                }
             }, LIVE_PREVIEW_DEBOUNCE_MS);
+        } else if (forceRebuild) {
+            if (this.rebuildTimer !== null) { clearTimeout(this.rebuildTimer); this.rebuildTimer = null; }
+            this.decorations = this.buildDecorations(update.view);
         } else {
             // Viewport/selection changes: rebuild immediately (no typing lag)
             if (this.rebuildTimer !== null) { clearTimeout(this.rebuildTimer); this.rebuildTimer = null; }

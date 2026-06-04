@@ -16,7 +16,7 @@ import {
   isInsideFencedCodeBeforeLine,
 } from "../../extensions/viewers/editor/markdown/edit-helpers.ts";
 import { parseMarkdownImageSource } from "../../extensions/viewers/editor/markdown/image-block.ts";
-import { normalizeLinkHref } from "../../extensions/viewers/editor/markdown/link.ts";
+import { normalizeLinkHref, normalizeReferenceLabel } from "../../extensions/viewers/editor/markdown/link.ts";
 import { isTableBoundaryPosition } from "../../extensions/viewers/editor/markdown/table-keymap.ts";
 import { shouldSignalTreeGrowth } from "../../extensions/viewers/editor/markdown/tree-progress.ts";
 import {
@@ -145,6 +145,12 @@ test("link normalization preserves Piclaw link safety policy", () => {
   expect(normalizeLinkHref('https://example.com/a')).toBe('https://example.com/a');
   expect(normalizeLinkHref('javascript:alert(1)')).toBeNull();
   expect(normalizeLinkHref('data:text/html,hi')).toBeNull();
+});
+
+test("reference link labels follow markdown case/whitespace normalization", () => {
+  expect(normalizeReferenceLabel('[Example Ref]')).toBe('example ref');
+  expect(normalizeReferenceLabel('Example\n\tRef')).toBe('example ref');
+  expect(normalizeReferenceLabel('[]')).toBe('');
 });
 
 test("table boundary helper treats the table as an atomic unit before destructive backspace", () => {
