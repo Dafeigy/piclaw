@@ -403,6 +403,26 @@ function mergeBuildRanges(ranges: DecorationBuildRange[]): DecorationBuildRange[
     return merged;
 }
 
+function getLivePreviewVisibleLineRanges(view: EditorView): DecorationBuildRange[] {
+    const doc = view.state.doc;
+    const docLength = doc.length;
+    const visible = view.visibleRanges.length > 0 ? view.visibleRanges : [{ from: 0, to: docLength }];
+    const ranges: DecorationBuildRange[] = visible.map((range) => ({
+        from: doc.lineAt(Math.max(0, Math.min(range.from, docLength))).from,
+        to: doc.lineAt(Math.max(0, Math.min(range.to, docLength))).to,
+    }));
+
+    for (const selection of view.state.selection.ranges) {
+        const anchor = Math.max(0, Math.min(selection.anchor, docLength));
+        const head = Math.max(0, Math.min(selection.head, docLength));
+        const fromLine = doc.lineAt(Math.min(anchor, head));
+        const toLine = doc.lineAt(Math.max(anchor, head));
+        ranges.push({ from: fromLine.from, to: toLine.to });
+    }
+
+    return mergeBuildRanges(ranges);
+}
+
 export function getLivePreviewDecorationRanges(view: EditorView): DecorationBuildRange[] {
     const doc = view.state.doc;
     const docLength = doc.length;
@@ -429,11 +449,16 @@ export function getLivePreviewDecorationRanges(view: EditorView): DecorationBuil
     return mergeBuildRanges(ranges);
 }
 
+export function livePreviewRangesCover(cached: DecorationBuildRange[], required: DecorationBuildRange[]): boolean {
+    return required.every((range) => cached.some((cachedRange) => cachedRange.from <= range.from && cachedRange.to >= range.to));
+}
+
 class LivePreviewPlugin {
     decorations: DecorationSet;
     private selectionLineSignature: string;
     private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
     private view: EditorView;
+    private decorationRanges: DecorationBuildRange[] = [];
     private destroyed = false;
 
     constructor(view: EditorView) {
@@ -458,10 +483,12 @@ class LivePreviewPlugin {
             selectionTouchesVisibleRange(update.view, update.state)
         );
         const viewportNowShowsSelection = update.viewportChanged && selectionTouchesVisibleRange(update.view, update.state);
+        const viewportRequiresRebuild = update.viewportChanged
+            && !livePreviewRangesCover(this.decorationRanges, getLivePreviewVisibleLineRanges(update.view));
 
         const needsRebuild =
             update.docChanged ||
-            update.viewportChanged ||
+            viewportRequiresRebuild ||
             forceRebuild ||
             treeGrew ||
             freezeReleased ||
@@ -515,8 +542,10 @@ class LivePreviewPlugin {
         const doc = view.state.doc;
         const cursorHead = view.state.selection.main.head;
         const cursorLine = doc.lineAt(cursorHead);
+        const buildRanges = getLivePreviewDecorationRanges(view);
+        this.decorationRanges = buildRanges;
 
-        for (const buildRange of getLivePreviewDecorationRanges(view)) {
+        for (const buildRange of buildRanges) {
             tree.iterate({
                 from: buildRange.from,
                 to: buildRange.to,

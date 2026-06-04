@@ -21,8 +21,10 @@ import { isTableBoundaryPosition } from "../../extensions/viewers/editor/markdow
 import { shouldSignalTreeGrowth } from "../../extensions/viewers/editor/markdown/tree-progress.ts";
 import {
   findMidTypingEmphasisRanges,
+  getLivePreviewDecorationRanges,
   getSelectionLineSignature,
   livePreviewFrozenField,
+  livePreviewRangesCover,
   pushSafeReplace,
   setLivePreviewFrozen,
   splitRangeByDocumentLines,
@@ -122,6 +124,22 @@ test("live preview freeze field toggles from pointer freeze effects", () => {
   expect(state.field(livePreviewFrozenField)).toBe(false);
   expect(frozen.field(livePreviewFrozenField)).toBe(true);
   expect(thawed.field(livePreviewFrozenField)).toBe(false);
+});
+
+test("live preview viewport cache covers nearby scroll inside the decoration margin", () => {
+  const doc = Array.from({ length: 1400 }, (_, index) => `line ${index} with **bold** text`).join("\n");
+  const state = EditorState.create({ doc, selection: { anchor: 0 } });
+  const visibleLine = state.doc.line(500);
+  const cachedRanges = getLivePreviewDecorationRanges({
+    state,
+    visibleRanges: [{ from: visibleLine.from, to: visibleLine.to }],
+  } as any);
+
+  const nearbyLine = state.doc.line(520);
+  const farLine = state.doc.line(1200);
+
+  expect(livePreviewRangesCover(cachedRanges, [{ from: nearbyLine.from, to: nearbyLine.to }])).toBe(true);
+  expect(livePreviewRangesCover(cachedRanges, [{ from: farLine.from, to: farLine.to }])).toBe(false);
 });
 
 test("tree progress signals on bounded growth threshold or complete parse", () => {
