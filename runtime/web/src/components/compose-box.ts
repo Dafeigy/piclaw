@@ -1363,12 +1363,14 @@ export function ComposeBox({
         modelThinkingLabel || null,
         routedModelStatus?.label || null,
         modelUsageLabel || null,
+        cacheHitMeta?.label || null,
     ].filter(Boolean).join(' • ');
     const modelUsageTitleParts = [
         activeModel ? `Current model: ${modelHintLabel}${modelHintSuffix}` : null,
         routedModelStatus?.title || null,
         modelUsage?.plan ? `Plan: ${modelUsage.plan}` : null,
         modelUsageLabel || null,
+        cacheHitMeta?.title || null,
         modelUsage?.primary?.reset_description || null,
         modelUsage?.secondary?.reset_description || null,
     ].filter(Boolean);
@@ -3368,19 +3370,21 @@ export function ComposeBox({
                     `}
                     ${showComposeMetaRow && html`
                     <div class="compose-meta-row">
-                        ${showModelPickerHint && html`
+                        ${(showModelPickerHint || cacheHitMeta) && html`
                             <div class="compose-model-meta">
-                                <button
-                                    ref=${modelHintRef}
-                                    type="button"
-                                    class="compose-model-hint compose-model-hint-btn"
-                                    title=${modelHintTitle}
-                                    aria-label="Open model picker"
-                                    onClick=${toggleModelPopup}
-                                    disabled=${switchingModel}
-                                >
-                                    ${switchingModel ? 'Switching…' : modelHintLabel}
-                                </button>
+                                ${showModelPickerHint && html`
+                                    <button
+                                        ref=${modelHintRef}
+                                        type="button"
+                                        class="compose-model-hint compose-model-hint-btn"
+                                        title=${modelHintTitle}
+                                        aria-label="Open model picker"
+                                        onClick=${toggleModelPopup}
+                                        disabled=${switchingModel}
+                                    >
+                                        ${switchingModel ? 'Switching…' : modelHintLabel}
+                                    </button>
+                                `}
                                 <div class="compose-model-meta-subline">
                                     ${!switchingModel && modelUsageSectionLabel && html`
                                         <span class="compose-model-usage-hint" title=${modelHintTitle}>
@@ -3389,11 +3393,6 @@ export function ComposeBox({
                                     `}
                                 </div>
                             </div>
-                        `}
-                        ${!searchMode && cacheHitMeta && html`
-                            <span class="compose-cache-hit-chip" title=${cacheHitMeta.title} data-tooltip=${cacheHitMeta.title}>
-                                ${cacheHitMeta.label}
-                            </span>
                         `}
                         ${!searchMode && contextUsage && contextUsage.percent != null && html`
                             <${ContextPie}

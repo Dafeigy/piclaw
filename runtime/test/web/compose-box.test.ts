@@ -137,6 +137,12 @@ test('resolveComposeCacheHitMeta ignores missing or zero cache-read telemetry', 
   expect(resolveComposeCacheHitMeta({ cacheUsage: { latest: { inputTokens: 1000, cacheReadTokens: 0, cacheWriteTokens: 1000 } } })).toBeNull();
 });
 
+test('compose cache-hit label renders inline with model usage metadata', () => {
+  const source = readFileSync(join(import.meta.dir, '../../web/src/components/compose-box.ts'), 'utf8');
+  expect(source).toContain('cacheHitMeta?.label || null');
+  expect(source).not.toContain('compose-cache-hit-chip');
+});
+
 test('slash autocomplete includes all canonical control commands', () => {
   const composeNames = new Set(SLASH_COMMANDS.map((item) => item.name));
   const missing = CONTROL_COMMAND_DEFINITIONS

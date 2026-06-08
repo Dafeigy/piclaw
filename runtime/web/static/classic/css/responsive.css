@@ -139,8 +139,7 @@
     }
 
     .compose-model-hint,
-    .compose-model-usage-hint,
-    .compose-cache-hit-chip {
+    .compose-model-usage-hint {
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -156,10 +155,6 @@
         white-space: nowrap;
     }
 
-    .compose-cache-hit-chip {
-        font-size: 8.8px;
-        padding: 1px 5px;
-    }
 
     .compose-actions {
         margin-left: auto;
@@ -246,8 +241,7 @@
     }
 
     .compose-model-hint,
-    .compose-model-usage-hint,
-    .compose-cache-hit-chip {
+    .compose-model-usage-hint {
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -263,10 +257,6 @@
         white-space: nowrap;
     }
 
-    .compose-cache-hit-chip {
-        font-size: 8.8px;
-        padding: 1px 5px;
-    }
 
     .compose-actions {
         margin-left: auto;
