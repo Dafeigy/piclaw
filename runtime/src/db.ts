@@ -147,6 +147,7 @@ export {
   getTokenUsageTotals,
   getTokenUsageByProvider,
   getTokenUsageByModel,
+  getLatestTokenUsage,
   getLatestTokenUsageModel,
   pruneOldTokenUsage,
 } from "./db/token-usage.js";

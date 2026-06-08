@@ -53,6 +53,15 @@ function createRuntime(session: any, retrySettings?: { enabled?: boolean; maxRet
 
 const tempLogsDirs: string[] = [];
 
+function findAgentLogFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return findAgentLogFiles(path);
+    if (entry.isFile() && entry.name.startsWith("agent-") && entry.name.endsWith(".log")) return [path];
+    return [];
+  });
+}
+
 function createTestLogsDir(): string {
   const logsDir = mkdtempSync(join(tmpdir(), "piclaw-run-agent-logs-"));
   tempLogsDirs.push(logsDir);
@@ -1926,9 +1935,9 @@ test("runAgentPrompt writes recovery diagnostics into the agent log", async () =
     expect(result.status).toBe("success");
     const logFile = tempLogsDirs.find((entry) => entry === logsDir);
     expect(logFile).toBe(logsDir);
-    const logName = readdirSync(logsDir).find((entry: string) => entry.startsWith("agent-") && entry.endsWith(".log"));
-    expect(logName).toBeTruthy();
-    const content = readFileSync(join(logsDir, logName!), "utf8");
+    const logFiles = findAgentLogFiles(logsDir);
+    expect(logFiles.length).toBeGreaterThan(0);
+    const content = readFileSync(logFiles.sort().slice(-1)[0], "utf8");
     expect(content).toContain("RecoveryAttemptsUsed: 1");
     expect(content).toContain("RecoveryRecovered: true");
     expect(content).toContain("RecoveryDiagnostics:");
