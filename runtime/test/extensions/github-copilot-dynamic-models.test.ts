@@ -6,6 +6,7 @@ import {
   fetchGitHubCopilotLiveModels,
   githubCopilotDynamicModels,
   mergeGitHubCopilotDynamicModels,
+  refreshGitHubCopilotDynamicModelsAtBoot,
   setGitHubCopilotDynamicModelsFetchForTests,
   shouldImportGitHubCopilotLiveModelId,
 } from "../../src/extensions/github-copilot-dynamic-models.js";
@@ -184,5 +185,34 @@ describe("github-copilot dynamic models extension", () => {
       "mai-code-1-flash-internal",
     ]);
     expect(registrations[0].config.models.some((model: any) => model.id === "text-embedding-3-small")).toBe(false);
+    expect(registrations[0].config.oauth).toBeTruthy();
+    expect(registrations[0].config.oauth.id).toBe("github-copilot");
+    expect(typeof registrations[0].config.oauth.getApiKey).toBe("function");
+  });
+
+  test("boot refresh registers GitHub Copilot with the real upstream OAuth provider", async () => {
+    const registrations: Array<{ name: string; config: any }> = [];
+    setGitHubCopilotDynamicModelsFetchForTests((async () => new Response(JSON.stringify({
+      data: [makeLiveModel("gpt-5.5"), makeLiveModel("claude-opus-4.6-1m", { supported_endpoints: ["/v1/messages"] })],
+    }), { status: 200 })) as typeof fetch);
+
+    const registry = {
+      getAll: () => [makeModel({ id: "gpt-5.5" })],
+      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "copilot-token", headers: { "X-Test": "1" } }),
+    };
+    const agentPool = {
+      hasProviderModels: () => true,
+      registerModelProvider(name: string, config: any) { registrations.push({ name, config }); },
+      getModelRegistry: () => registry,
+    };
+
+    await refreshGitHubCopilotDynamicModelsAtBoot(agentPool);
+
+    expect(registrations).toHaveLength(1);
+    expect(registrations[0].name).toBe("github-copilot");
+    expect(registrations[0].config.oauth).toBeTruthy();
+    expect(registrations[0].config.oauth.id).toBe("github-copilot");
+    expect(typeof registrations[0].config.oauth.getApiKey).toBe("function");
+    expect(registrations[0].config.oauth).not.toEqual({ id: "github-copilot" });
   });
 });
