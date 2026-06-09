@@ -3,7 +3,7 @@
  */
 
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
-import { createLogger, debugSuppressedError } from "../utils/logger.js";
+import { createLogger } from "../utils/logger.js";
 import { refreshGitHubCopilotDynamicModelsAtBoot } from "../extensions/github-copilot-dynamic-models.js";
 
 export type AzureProviderBootstrapHandle = { stop: () => void; refresh: () => Promise<void> };
@@ -60,8 +60,9 @@ export async function registerGitHubCopilotDynamicModelsAtBoot(agentPool: Provid
   try {
     await refreshGitHubCopilotDynamicModelsAtBoot(agentPool as any);
   } catch (error) {
-    debugSuppressedError(log, "Failed to register GitHub Copilot dynamic models at boot; will retry on first session_start.", error, {
+    log.warn("Failed to register GitHub Copilot dynamic models at boot; will retry on first session_start.", {
       operation: "register_optional_providers.github_copilot_boot_failed",
+      err: error,
     });
   }
 }

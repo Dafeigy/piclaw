@@ -392,6 +392,10 @@ export async function refreshGitHubCopilotDynamicModelsAtBoot(agentPool: {
 }): Promise<void> {
   if (DISABLED) return;
 
+  log.info("Starting boot-time GitHub Copilot dynamic model refresh.", {
+    operation: "github_copilot_dynamic_models.boot_start",
+  });
+
   const registry = agentPool.getModelRegistry() as GitHubCopilotDynamicModelsContext["modelRegistry"];
   const existingModels = registry.getAll().filter((model) => model.provider === PROVIDER && model.id);
   if (existingModels.length === 0) return;
@@ -401,8 +405,9 @@ export async function refreshGitHubCopilotDynamicModelsAtBoot(agentPool: {
     ?? existingModels[0];
   const auth = await registry.getApiKeyAndHeaders(seedModel);
   if (!auth.ok || !auth.apiKey) {
-    log.debug("Skipping boot-time GitHub Copilot dynamic model refresh because provider auth is unavailable.", {
+    log.info("Skipping boot-time GitHub Copilot dynamic model refresh because provider auth is unavailable.", {
       operation: "github_copilot_dynamic_models.boot_auth_unavailable",
+      error: (auth as { error?: string }).error ?? null,
     });
     return;
   }
@@ -421,8 +426,9 @@ export async function refreshGitHubCopilotDynamicModelsAtBoot(agentPool: {
     name: "GitHub Copilot",
     baseUrl: providerBaseUrl,
     headers: COPILOT_HEADERS,
+    oauth: { id: PROVIDER },
     models: providerModels,
-  });
+  } as any);
 
   log.info("Registered GitHub Copilot dynamic models at boot from live /models catalog.", {
     operation: "github_copilot_dynamic_models.boot_register",
