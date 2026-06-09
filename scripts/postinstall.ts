@@ -7,6 +7,7 @@
 
 import { resolve, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { patchPiOAuthProviderAuth } from "../runtime/scripts/patch-pi-oauth-provider-auth.js";
 
 const ROOT = dirname(import.meta.dir);
 const LOG = "[postinstall]";
@@ -66,6 +67,13 @@ for (const pkg of CM_SINGLETONS) {
 }
 if (cmDupsRemoved > 0) {
   console.log(`${LOG} Removed ${cmDupsRemoved} nested CodeMirror duplicate(s) to enforce singleton instances`);
+}
+
+const piAuthPatch = patchPiOAuthProviderAuth(ROOT);
+if (piAuthPatch.changed) {
+  console.log(`${LOG} Patched Pi OAuth provider auth compatibility (${piAuthPatch.path})`);
+} else if (piAuthPatch.reason !== "already patched") {
+  console.warn(`${LOG} Pi OAuth provider auth compatibility patch not applied: ${piAuthPatch.reason} (${piAuthPatch.path})`);
 }
 
 console.log(`${LOG} Done`);
