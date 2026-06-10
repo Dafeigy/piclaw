@@ -188,6 +188,7 @@ export interface PurgeArchivedBranchActionOptions {
   refreshActiveChatAgents: () => void;
   refreshCurrentChatBranches: () => void;
   showIntentToast: (title: string, detail?: string | null, kind?: string, durationMs?: number) => void;
+  confirm?: (message: string) => boolean;
 }
 
 export async function purgeArchivedBranchAction(options: PurgeArchivedBranchActionOptions): Promise<void> {
@@ -716,7 +717,7 @@ export function useBranchPaneLifecycle(options: UseBranchPaneLifecycleOptions) {
     });
   }, [activeChatAgents, chatOnlyMode, currentBranchRecord, currentChatBranches, currentChatJid, navigate, pruneChatBranch, refreshActiveChatAgents, refreshCurrentChatBranches, showIntentToast]);
 
-  const handlePurgeArchivedBranch = useCallback(async (targetChatJid: string) => {
+  const handlePurgeArchivedBranch = useCallback(async (targetChatJid: string, options?: { confirmed?: boolean }) => {
     await purgeArchivedBranchAction({
       targetChatJid,
       purgeChatBranch,
@@ -724,6 +725,7 @@ export function useBranchPaneLifecycle(options: UseBranchPaneLifecycleOptions) {
       refreshActiveChatAgents,
       refreshCurrentChatBranches,
       showIntentToast,
+      ...(options?.confirmed ? { confirm: () => true } : {}),
     });
   }, [currentChatBranches, purgeChatBranch, refreshActiveChatAgents, refreshCurrentChatBranches, showIntentToast]);
 
