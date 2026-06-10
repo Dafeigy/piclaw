@@ -238,8 +238,8 @@ test('purgeArchivedBranch supports archived root sessions and uses irreversible 
   });
 
   expect(deleted).toBe(true);
-  expect(confirmations[0]).toContain('Permanently delete @feature?');
-  expect(confirmations[0]).toContain('It cannot be undone.');
+  expect(confirmations[1]).toContain('Permanently delete @feature?');
+  expect(confirmations[1]).toContain('It cannot be undone.');
   expect(toasts[0]).toEqual(['Archived branch deleted', '@feature was permanently deleted.', 'info', 4000]);
 
   toasts.length = 0;
