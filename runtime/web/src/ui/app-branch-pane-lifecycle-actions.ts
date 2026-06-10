@@ -736,6 +736,7 @@ export function useBranchPaneLifecycle(options: UseBranchPaneLifecycleOptions) {
       setActiveChatAgents((prev) => Array.isArray(prev) ? prev.filter((chat) => chat?.chat_jid !== target) : prev);
       setCurrentChatBranches((prev) => Array.isArray(prev) ? prev.filter((chat) => chat?.chat_jid !== target) : prev);
     }
+    return purged;
   }, [activeChatAgents, currentChatBranches, purgeChatBranch, refreshActiveChatAgents, refreshCurrentChatBranches, setActiveChatAgents, setCurrentChatBranches, showIntentToast]);
 
   const handleRestoreBranch = useCallback(async (targetChatJid: string) => {
