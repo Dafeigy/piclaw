@@ -163,18 +163,19 @@ export interface PruneCurrentBranchActionOptions {
   showIntentToast: (title: string, detail?: string | null, kind?: string, durationMs?: number) => void;
   chatOnlyMode?: boolean;
   navigate: (url: string) => void;
+  confirm?: (message: string) => boolean;
   hasWindow?: boolean;
   baseHref?: string;
 }
 
-export async function pruneCurrentBranchAction(options: PruneCurrentBranchActionOptions): Promise<void> {
+export async function pruneCurrentBranchAction(options: PruneCurrentBranchActionOptions): Promise<boolean> {
   const {
     hasWindow = typeof window !== 'undefined',
     baseHref = hasWindow ? window.location.href : 'http://localhost/',
     ...rest
   } = options;
 
-  await pruneCurrentBranch({
+  return await pruneCurrentBranch({
     hasWindow,
     baseHref,
     ...rest,
@@ -701,8 +702,11 @@ export function useBranchPaneLifecycle(options: UseBranchPaneLifecycleOptions) {
     });
   }, [closeRenameCurrentBranchForm, currentBranchRecord, chatOnlyMode, getFormLock, navigate, openRenameCurrentBranchForm, refreshActiveChatAgents, refreshCurrentChatBranches, renameBranchInFlightRef, renameBranchLockUntilRef, renameChatBranch, setIsRenamingBranch, showIntentToast]);
 
-  const handlePruneCurrentBranch = useCallback(async (targetChatJid: string | null = null) => {
-    await pruneCurrentBranchAction({
+  const handlePruneCurrentBranch = useCallback(async (targetChatJid: string | null = null, options?: { confirmed?: boolean }) => {
+    const target = typeof targetChatJid === 'string' && targetChatJid.trim()
+      ? targetChatJid.trim()
+      : currentBranchRecord?.chat_jid || currentChatJid;
+    const pruned = await pruneCurrentBranchAction({
       targetChatJid,
       currentChatJid,
       currentBranchRecord,
@@ -714,8 +718,14 @@ export function useBranchPaneLifecycle(options: UseBranchPaneLifecycleOptions) {
       showIntentToast,
       chatOnlyMode,
       navigate,
+      ...(options?.confirmed ? { confirm: () => true } : {}),
     });
-  }, [activeChatAgents, chatOnlyMode, currentBranchRecord, currentChatBranches, currentChatJid, navigate, pruneChatBranch, refreshActiveChatAgents, refreshCurrentChatBranches, showIntentToast]);
+    if (pruned && target) {
+      setActiveChatAgents((prev) => Array.isArray(prev) ? prev.filter((chat) => chat?.chat_jid !== target) : prev);
+      setCurrentChatBranches((prev) => Array.isArray(prev) ? prev.filter((chat) => chat?.chat_jid !== target) : prev);
+    }
+    return pruned;
+  }, [activeChatAgents, chatOnlyMode, currentBranchRecord, currentChatBranches, currentChatJid, navigate, pruneChatBranch, refreshActiveChatAgents, refreshCurrentChatBranches, setActiveChatAgents, setCurrentChatBranches, showIntentToast]);
 
   const handlePurgeArchivedBranch = useCallback(async (targetChatJid: string, options?: { confirmed?: boolean }) => {
     const target = typeof targetChatJid === 'string' ? targetChatJid.trim() : '';

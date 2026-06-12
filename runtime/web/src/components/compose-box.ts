@@ -1148,6 +1148,7 @@ export function ComposeBox({
     const [showModelPopup, setShowModelPopup] = useState(false);
     const [showSessionPopup, setShowSessionPopup] = useState(false);
     const [pendingPurgeChatJid, setPendingPurgeChatJid] = useState(null);
+    const [pendingPruneChatJid, setPendingPruneChatJid] = useState(null);
     const [modelOptions, setModelOptions] = useState([]);
     const [modelPopupIndex, setModelPopupIndex] = useState(0);
     const [sessionPopupIndex, setSessionPopupIndex] = useState(0);
@@ -2709,7 +2710,10 @@ export function ComposeBox({
     }, [showSessionPopup, showSessionSwitcherButton]);
 
     useEffect(() => {
-        if (!showSessionPopup) setPendingPurgeChatJid(null);
+        if (!showSessionPopup) {
+            setPendingPurgeChatJid(null);
+            setPendingPruneChatJid(null);
+        }
     }, [showSessionPopup]);
 
     useEffect(() => {
@@ -3232,6 +3236,8 @@ export function ComposeBox({
                                     const canPrune = !isRoot && !chat.is_active && !archived && typeof onDeleteSession === 'function';
                                     const canPurgeArchived = archived && canPurgeArchivedSession;
                                     const purgeConfirming = canPurgeArchived && pendingPurgeChatJid === chat.chat_jid;
+                                    const pruneConfirming = canPrune && pendingPruneChatJid === chat.chat_jid;
+                                    const deleteConfirming = purgeConfirming || pruneConfirming;
                                     const label = formatBranchPickerLabel(chat, { currentChatJid });
                                     return html`
                                         <div key=${chat.chat_jid} class=${`compose-model-popup-item-row${archived ? ' archived' : ''}`}>
@@ -3282,17 +3288,21 @@ export function ComposeBox({
                                             ${(canPrune || canPurgeArchived) && html`
                                                 <button
                                                     type="button"
-                                                    class=${`compose-model-popup-item-delete${purgeConfirming ? ' confirming' : ''}`}
+                                                    class=${`compose-model-popup-item-delete${deleteConfirming ? ' confirming' : ''}`}
                                                     title=${canPurgeArchived
                                                         ? purgeConfirming
                                                             ? 'Confirm permanent deletion'
                                                             : (isRoot ? 'Permanently delete this archived session' : 'Permanently delete this archived branch')
-                                                        : 'Delete this branch'}
+                                                        : pruneConfirming
+                                                            ? 'Confirm branch deletion'
+                                                            : 'Delete this branch'}
                                                     aria-label=${canPurgeArchived
                                                         ? purgeConfirming
                                                             ? (isRoot ? `Confirm permanent deletion of archived session @${chat.agent_name}` : `Confirm permanent deletion of archived branch @${chat.agent_name}`)
                                                             : (isRoot ? `Permanently delete archived session @${chat.agent_name}` : `Permanently delete archived branch @${chat.agent_name}`)
-                                                        : `Delete @${chat.agent_name}`}
+                                                        : pruneConfirming
+                                                            ? `Confirm delete @${chat.agent_name}`
+                                                            : `Delete @${chat.agent_name}`}
                                                     onClick=${async (e) => {
                                                         e.stopPropagation();
                                                         if (canPurgeArchived) {
@@ -3307,11 +3317,23 @@ export function ComposeBox({
                                                             }
                                                             return;
                                                         }
+                                                        if (canPrune) {
+                                                            if (!pruneConfirming) {
+                                                                setPendingPruneChatJid(chat.chat_jid);
+                                                                return;
+                                                            }
+                                                            const pruned = await onDeleteSession(chat.chat_jid, { confirmed: true });
+                                                            if (pruned !== false) {
+                                                                setPendingPruneChatJid(null);
+                                                                setShowSessionPopup(false);
+                                                            }
+                                                            return;
+                                                        }
                                                         setShowSessionPopup(false);
                                                         void onDeleteSession(chat.chat_jid);
                                                     }}
                                                 >
-                                                    ${purgeConfirming
+                                                    ${deleteConfirming
                                                         ? html`<span class="compose-model-popup-item-delete-confirm">OK</span>`
                                                         : html`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                                             <line x1="18" y1="6" x2="6" y2="18" />
