@@ -232,13 +232,16 @@ describe("smart-compaction", () => {
     expect(formatProgressRange(4, 4, 9)).toBe("4 of 9");
   });
 
-  it("maps compaction reasoning targets to model support and context capacity", () => {
+  it("maps compaction reasoning targets to explicit model support and context capacity", () => {
+    const explicitCompactionMap = { minimal: "minimal", low: "low", medium: "medium", high: "high" };
+
     expect(getCompactionReasoningEffort({ provider: "test", id: "plain", reasoning: false, contextWindow: 512_000 }, "progressive_final")).toBeUndefined();
-    expect(getCompactionReasoningEffort({ provider: "test", id: "tiny", reasoning: true, contextWindow: 24_000 }, "progressive_final")).toBe("minimal");
-    expect(getCompactionReasoningEffort({ provider: "test", id: "medium", reasoning: true, contextWindow: 128_000 }, "progressive_final")).toBe("medium");
-    expect(getCompactionReasoningEffort({ provider: "test", id: "large", reasoning: true, contextWindow: 512_000 }, "progressive_chunk")).toBe("low");
-    expect(getCompactionReasoningEffort({ provider: "test", id: "large", reasoning: true, contextWindow: 512_000 }, "progressive_final")).toBe("high");
-    expect(getCompactionReasoningEffort({ provider: "test", id: "no-high", reasoning: true, contextWindow: 512_000, thinkingLevelMap: { high: null } }, "progressive_final")).toBe("medium");
+    expect(getCompactionReasoningEffort({ provider: "test", id: "implicit", reasoning: true, contextWindow: 512_000 }, "progressive_final")).toBeUndefined();
+    expect(getCompactionReasoningEffort({ provider: "test", id: "tiny", reasoning: true, contextWindow: 24_000, thinkingLevelMap: explicitCompactionMap }, "progressive_final")).toBe("minimal");
+    expect(getCompactionReasoningEffort({ provider: "test", id: "medium", reasoning: true, contextWindow: 128_000, thinkingLevelMap: explicitCompactionMap }, "progressive_final")).toBe("medium");
+    expect(getCompactionReasoningEffort({ provider: "test", id: "large", reasoning: true, contextWindow: 512_000, thinkingLevelMap: explicitCompactionMap }, "progressive_chunk")).toBe("low");
+    expect(getCompactionReasoningEffort({ provider: "test", id: "large", reasoning: true, contextWindow: 512_000, thinkingLevelMap: explicitCompactionMap }, "progressive_final")).toBe("high");
+    expect(getCompactionReasoningEffort({ provider: "test", id: "no-high", reasoning: true, contextWindow: 512_000, thinkingLevelMap: { minimal: "minimal", low: "low", medium: "medium", high: null } }, "progressive_final")).toBe("medium");
     expect(getCompactionReasoningEffort({ provider: "test", id: "no-supported-effort", reasoning: true, contextWindow: 512_000, thinkingLevelMap: { minimal: null, low: null, medium: null, high: null } }, "progressive_final")).toBeUndefined();
     expect(getCompactionReasoningEffort({ provider: "github-copilot", id: "claude-opus-4.8", reasoning: true, contextWindow: 200_000, thinkingLevelMap: { xhigh: "xhigh" } }, "selective")).toBeUndefined();
   });
@@ -306,7 +309,7 @@ describe("smart-compaction", () => {
     });
 
     const prep = makePreparation(60);
-    const ctx = makeCtx({ model: { provider: "test", id: "test-model", reasoning: true, contextWindow: 128000 } });
+    const ctx = makeCtx({ model: { provider: "test", id: "test-model", reasoning: true, contextWindow: 128000, thinkingLevelMap: { minimal: "minimal", low: "low", medium: "medium", high: "high" } } });
     const result = await handler!(
       {
         preparation: prep,
@@ -886,7 +889,7 @@ describe("smart-compaction", () => {
         };
       });
 
-      const ctx = makeCtx({ model: { provider: "test", id: "small-context", contextWindow: 16_000, reasoning: true } });
+      const ctx = makeCtx({ model: { provider: "test", id: "small-context", contextWindow: 16_000, reasoning: true, thinkingLevelMap: { minimal: "minimal", low: "low", medium: "medium", high: "high" } } });
       const result = await handler!(
         {
           preparation: makePreparation(longMessages.length, {
