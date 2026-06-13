@@ -396,3 +396,176 @@ test("refreshDailyNotesFromMessages uses UTC day boundaries for the start of the
     rmSync(base, { recursive: true, force: true });
   }
 });
+
+test("refreshDailyNotesFromMessages builds per-session-tree DREAM_CUES for multi-session days", () => {
+  const base = makeTempWorkspace("piclaw-daily-notes-session-tree-cues-");
+  try {
+    const day = isoDateDaysAgo(1);
+    const script = `
+      import { initDatabase, storeMessage, getDb } from ${JSON.stringify(DB_MODULE)};
+      import { refreshDailyNotesFromMessages } from ${JSON.stringify(DAILY_NOTES_MODULE)};
+      initDatabase();
+      const db = getDb();
+      db.prepare("INSERT INTO chat_branches (branch_id, chat_jid, root_chat_jid, parent_branch_id, agent_name, created_at, updated_at, archived_at) VALUES (?, ?, ?, NULL, ?, ?, ?, NULL)")
+        .run('branch-web-default', 'web:branch', 'web:default', 'test-agent', '${day}T15:59:00.000Z', '${day}T15:59:00.000Z');
+      const items = [];
+      for (let i = 0; i < 12; i += 1) {
+        items.push({
+          id: 'mc-' + i,
+          chat_jid: 'mc-review',
+          sender: i % 2 === 0 ? 'user' : 'agent',
+          sender_name: i % 2 === 0 ? 'You' : 'Assistant',
+          content: 'mc review message ' + i,
+          timestamp: '${day}T14:' + String(i).padStart(2, '0') + ':00.000Z',
+          is_bot_message: i % 2 === 1,
+          is_terminal_agent_reply: i % 2 === 1,
+        });
+      }
+      for (let i = 0; i < 4; i += 1) {
+        items.push({
+          id: 'web-' + i,
+          chat_jid: 'web:branch',
+          sender: i % 2 === 0 ? 'user' : 'agent',
+          sender_name: i % 2 === 0 ? 'You' : 'Assistant',
+          content: 'branch session message ' + i,
+          timestamp: '${day}T16:' + String(i).padStart(2, '0') + ':00.000Z',
+          is_bot_message: i % 2 === 1,
+          is_terminal_agent_reply: i % 2 === 1,
+        });
+      }
+      for (let i = 0; i < 3; i += 1) {
+        items.push({
+          id: 'tg-' + i,
+          chat_jid: 'telegram:1',
+          sender: i % 2 === 0 ? 'user' : 'agent',
+          sender_name: i % 2 === 0 ? 'You' : 'Assistant',
+          content: 'telegram session message ' + i,
+          timestamp: '${day}T18:' + String(i).padStart(2, '0') + ':00.000Z',
+          is_bot_message: i % 2 === 1,
+          is_terminal_agent_reply: i % 2 === 1,
+        });
+      }
+      for (const item of items) storeMessage(item);
+      const out = refreshDailyNotesFromMessages({ chatJid: '*', days: 7 });
+      console.log(JSON.stringify({ created: out.created }));
+    `;
+
+    const proc = Bun.spawnSync([process.execPath, "-e", script], { env: makeEnv(base), stdout: "pipe", stderr: "pipe" });
+    expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+
+    const note = readFileSync(join(base, "notes", "daily", `${day}.md`), "utf8");
+    expect(note).toContain("bounded_full_slice: no");
+    expect(note).toContain("session_tree_index:");
+    expect(note).toContain("mc-review: messages=12, taken=10");
+    expect(note).toContain("web:branch (root: web:default): messages=4, taken=4");
+    expect(note).toContain("telegram:1: messages=3, taken=3");
+    expect(note).toContain("tree: mc-review — took 10/12");
+    expect(note).toContain("tree: web:branch (root: web:default) — took 4/4");
+    expect(note).toContain("tree: telegram:1 — took 3/3");
+    expect(note).toContain("omitted_middle_messages: 2");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("refreshDailyNotesFromMessages honours cue threshold env overrides", () => {
+  const base = makeTempWorkspace("piclaw-daily-notes-cue-env-");
+  try {
+    const day = isoDateDaysAgo(1);
+    const userTs = `${day}T10:00:00.000Z`;
+    const agentTs = `${day}T10:05:00.000Z`;
+
+    const script = `
+      import { initDatabase, storeMessage } from ${JSON.stringify(DB_MODULE)};
+      import { refreshDailyNotesFromMessages } from ${JSON.stringify(DAILY_NOTES_MODULE)};
+      initDatabase();
+      storeMessage({
+        id: 'user-1',
+        chat_jid: 'web:default',
+        sender: 'user',
+        sender_name: 'You',
+        content: 'hello',
+        timestamp: '${userTs}',
+        is_bot_message: false,
+      });
+      storeMessage({
+        id: 'agent-1',
+        chat_jid: 'web:default',
+        sender: 'agent',
+        sender_name: 'Assistant',
+        content: 'hi',
+        timestamp: '${agentTs}',
+        is_bot_message: true,
+        is_terminal_agent_reply: true,
+      });
+      refreshDailyNotesFromMessages({ chatJid: '*', days: 7 });
+    `;
+
+    const proc = Bun.spawnSync([process.execPath, "-e", script], {
+      env: {
+        ...makeEnv(base),
+        PICLAW_DREAM_CUE_FULL_SLICE_MAX_MESSAGES: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+
+    const note = readFileSync(join(base, "notes", "daily", `${day}.md`), "utf8");
+    expect(note).toContain("bounded_full_slice: no");
+    expect(note).toContain("cue_full_slice_thresholds: messages<=1, session_trees<=2");
+    expect(note).toContain("session_tree_index:");
+    expect(note).toContain("web:default: messages=2, taken=2");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("refreshDailyNotesFromMessages downgrades large-tree cues to 2+2 and records budget breaches", () => {
+  const base = makeTempWorkspace("piclaw-daily-notes-cue-budget-");
+  try {
+    const day = isoDateDaysAgo(1);
+    const script = `
+      import { initDatabase, storeMessage } from ${JSON.stringify(DB_MODULE)};
+      import { refreshDailyNotesFromMessages } from ${JSON.stringify(DAILY_NOTES_MODULE)};
+      initDatabase();
+      for (const tree of ['mc-review', 'web:smalltalk', 'telegram:1']) {
+        for (let i = 0; i < 12; i += 1) {
+          storeMessage({
+            id: tree + '-' + i,
+            chat_jid: tree,
+            sender: i % 2 === 0 ? 'user' : 'agent',
+            sender_name: i % 2 === 0 ? 'You' : 'Assistant',
+            content: tree + ' message ' + i,
+            timestamp: '${day}T' + String(10 + (tree === 'mc-review' ? 0 : tree === 'web:smalltalk' ? 1 : 2)).padStart(2, '0') + ':' + String(i).padStart(2, '0') + ':00.000Z',
+            is_bot_message: i % 2 === 1,
+            is_terminal_agent_reply: i % 2 === 1,
+          });
+        }
+      }
+      refreshDailyNotesFromMessages({ chatJid: '*', days: 7 });
+    `;
+
+    const proc = Bun.spawnSync([process.execPath, "-e", script], {
+      env: {
+        ...makeEnv(base),
+        PICLAW_DREAM_CUE_MAX_SNIPPETS: "10",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+
+    const note = readFileSync(join(base, "notes", "daily", `${day}.md`), "utf8");
+    expect(note).toContain("cue_budget_fallback_applied: yes");
+    expect(note).toContain("cue_per_tree_large_window: 2+2");
+    expect(note).toContain("cue_global_budget_breached: yes");
+    expect(note).toContain("cue_global_budget_breached_note:");
+    expect(note).toContain("mc-review: messages=12, taken=4");
+    expect(note).toContain("web:smalltalk: messages=12, taken=4");
+    expect(note).toContain("telegram:1: messages=12, taken=4");
+    expect(note).toContain("tree: mc-review — took 4/12");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

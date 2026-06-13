@@ -256,11 +256,98 @@ function buildCueTerms(messages: Row[]): string[] {
     .map(([word]) => word);
 }
 
+interface DreamCueConfig {
+  fullSliceMaxMessages: number;
+  fullSliceMaxSessionTrees: number;
+  smallTreeMaxMessages: number;
+  maxSnippets: number;
+}
+
+interface SessionTreeCuePlan {
+  rootChatJid: string;
+  label: string;
+  chatJids: string[];
+  messages: Row[];
+  selected: Row[];
+  firstTimestamp: string;
+  lastTimestamp: string;
+}
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const parsed = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getDreamCueConfig(): DreamCueConfig {
+  return {
+    fullSliceMaxMessages: readPositiveIntEnv("PICLAW_DREAM_CUE_FULL_SLICE_MAX_MESSAGES", 50),
+    fullSliceMaxSessionTrees: readPositiveIntEnv("PICLAW_DREAM_CUE_FULL_SLICE_MAX_SESSION_TREES", 2),
+    smallTreeMaxMessages: readPositiveIntEnv("PICLAW_DREAM_CUE_SMALL_TREE_MAX_MESSAGES", 10),
+    maxSnippets: readPositiveIntEnv("PICLAW_DREAM_CUE_MAX_SNIPPETS", 100),
+  };
+}
+
+function selectHeadTailMessages(messages: Row[], edgeCount: number): Row[] {
+  if (messages.length <= edgeCount * 2) return [...messages];
+  const output: Row[] = [];
+  const seen = new Set<number>();
+  for (let index = 0; index < Math.min(edgeCount, messages.length); index += 1) {
+    if (seen.has(index)) continue;
+    seen.add(index);
+    output.push(messages[index]);
+  }
+  for (let index = Math.max(edgeCount, messages.length - edgeCount); index < messages.length; index += 1) {
+    if (seen.has(index)) continue;
+    seen.add(index);
+    output.push(messages[index]);
+  }
+  return output;
+}
+
+function buildSessionTreeLabel(rootChatJid: string, chatJids: string[]): string {
+  const uniqueChatJids = [...new Set(chatJids)];
+  const primaryChatJid = uniqueChatJids[0] || rootChatJid;
+  if (primaryChatJid !== rootChatJid) {
+    return `${primaryChatJid} (root: ${rootChatJid})`;
+  }
+  if (uniqueChatJids.length <= 1) return rootChatJid;
+  const extraChats = uniqueChatJids.length - 1;
+  return `${rootChatJid} (+${extraChats} chat${extraChats === 1 ? "" : "s"})`;
+}
+
+function buildSessionTreeCuePlans(messages: Row[], edgeCount: number, smallTreeMaxMessages: number): SessionTreeCuePlan[] {
+  const treeMap = new Map<string, Row[]>();
+  for (const message of messages) {
+    if (!treeMap.has(message.root_chat_jid)) treeMap.set(message.root_chat_jid, []);
+    treeMap.get(message.root_chat_jid)!.push(message);
+  }
+
+  return [...treeMap.entries()]
+    .map(([rootChatJid, treeMessages]) => {
+      const chatJids = [...new Set(treeMessages.map((message) => message.chat_jid))];
+      return {
+        rootChatJid,
+        label: buildSessionTreeLabel(rootChatJid, chatJids),
+        chatJids,
+        messages: treeMessages,
+        selected: treeMessages.length <= smallTreeMaxMessages
+          ? [...treeMessages]
+          : selectHeadTailMessages(treeMessages, edgeCount),
+        firstTimestamp: treeMessages[0].timestamp,
+        lastTimestamp: treeMessages[treeMessages.length - 1].timestamp,
+      };
+    })
+    .sort((left, right) => left.firstTimestamp.localeCompare(right.firstTimestamp));
+}
+
+function formatCueSnippet(message: Row): string {
+  const role = message.is_bot_message ? "assistant" : "user";
+  return `- ${message.timestamp} ${role} ${cleanCueText(message.sender_name, 40)} [${cleanCueText(message.chat_jid, 80)}]: ${cleanCueText(message.content)}`;
+}
+
 function buildDreamCues(messages: Row[], options: { firstTimestamp: string; lastTimestamp: string; totalMsgs: number; sessionTrees: number; sessionChats: number }): string {
-  const includeFullSlice = options.totalMsgs <= 50 && options.sessionTrees <= 2;
-  const selected = includeFullSlice
-    ? messages
-    : [...messages.slice(0, 5), ...messages.slice(Math.max(5, messages.length - 5))];
+  const config = getDreamCueConfig();
+  const includeFullSlice = options.totalMsgs <= config.fullSliceMaxMessages && options.sessionTrees <= config.fullSliceMaxSessionTrees;
   const lines = [
     DREAM_CUES_START,
     "These cues are hidden recovery hints for Dream. Treat front matter as the transcript contract; use message IDs/timestamps with messages search only if more evidence is needed.",
@@ -269,16 +356,50 @@ function buildDreamCues(messages: Row[], options: { firstTimestamp: string; last
     `session_trees: ${options.sessionTrees}`,
     `session_chats: ${options.sessionChats}`,
     `bounded_full_slice: ${includeFullSlice ? "yes" : "no"}`,
+    `cue_full_slice_thresholds: messages<=${config.fullSliceMaxMessages}, session_trees<=${config.fullSliceMaxSessionTrees}`,
   ];
   const terms = buildCueTerms(messages);
   if (terms.length > 0) lines.push(`cue_terms: ${terms.join(", ")}`);
-  lines.push("message_snippets:");
-  for (const msg of selected) {
-    const role = msg.is_bot_message ? "assistant" : "user";
-    lines.push(`- ${msg.timestamp} ${role} ${cleanCueText(msg.sender_name, 40)} [${cleanCueText(msg.chat_jid, 80)}]: ${cleanCueText(msg.content)}`);
+
+  if (includeFullSlice) {
+    lines.push("message_snippets:");
+    for (const message of messages) {
+      lines.push(formatCueSnippet(message));
+    }
+    lines.push(DREAM_CUES_END);
+    return lines.join("\n");
   }
-  if (!includeFullSlice && selected.length < messages.length) {
-    lines.push(`omitted_middle_messages: ${messages.length - selected.length}`);
+
+  let plans = buildSessionTreeCuePlans(messages, 5, config.smallTreeMaxMessages);
+  const initialSnippetCount = plans.reduce((sum, plan) => sum + plan.selected.length, 0);
+  const budgetFallbackApplied = initialSnippetCount > config.maxSnippets;
+  if (budgetFallbackApplied) {
+    plans = buildSessionTreeCuePlans(messages, 2, config.smallTreeMaxMessages);
+  }
+  const selectedSnippetCount = plans.reduce((sum, plan) => sum + plan.selected.length, 0);
+  const budgetBreached = selectedSnippetCount > config.maxSnippets;
+
+  lines.push(`cue_small_tree_max_messages: ${config.smallTreeMaxMessages}`);
+  lines.push(`cue_global_snippet_budget: ${config.maxSnippets}`);
+  lines.push(`cue_per_tree_large_window: ${budgetFallbackApplied ? "2+2" : "5+5"}`);
+  lines.push(`cue_budget_fallback_applied: ${budgetFallbackApplied ? "yes" : "no"}`);
+  lines.push(`cue_global_budget_breached: ${budgetBreached ? "yes" : "no"}`);
+  if (budgetBreached) {
+    lines.push(`cue_global_budget_breached_note: ${selectedSnippetCount} snippets still exceed the ${config.maxSnippets}-snippet budget after reducing large trees to 2+2. Mention this in the Dream report.`);
+  }
+  lines.push("session_tree_index:");
+  for (const plan of plans) {
+    lines.push(`- ${cleanCueText(plan.label, 120)}: messages=${plan.messages.length}, taken=${plan.selected.length}, chats=${plan.chatJids.length}, slice=${plan.firstTimestamp}..${plan.lastTimestamp}`);
+  }
+  lines.push("message_snippets:");
+  for (const plan of plans) {
+    lines.push(`tree: ${cleanCueText(plan.label, 120)} — took ${plan.selected.length}/${plan.messages.length}`);
+    for (const message of plan.selected) {
+      lines.push(formatCueSnippet(message));
+    }
+  }
+  if (selectedSnippetCount < messages.length) {
+    lines.push(`omitted_middle_messages: ${messages.length - selectedSnippetCount}`);
   }
   lines.push(DREAM_CUES_END);
   return lines.join("\n");
