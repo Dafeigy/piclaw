@@ -571,7 +571,7 @@ It runs when there has been activity since the last consolidation.
 | Variable | Default | Purpose |
 |----------|---------|---------||
 | `PICLAW_DREAM_CRON` | `0 1 * * *` | Cron schedule for AutoDream. Evaluated in the runtime timezone (`TZ` / runtime timing config), so the default is 01:00 local runtime time. |
-| `PICLAW_DREAM_MODEL` | _(unset — inherits session model)_ | Pin Dream to a specific model label (e.g. `anthropic/claude-sonnet-4-20250514`). The scheduler switches before the Dream turn and restores the original model afterward. |
+| `PICLAW_DREAM_MODEL` | _(unset — inherits session model)_ | Pin Dream / AutoDream to a specific model label (e.g. `anthropic/claude-sonnet-4-20250514`). The Dream pass applies it to the temporary Dream chat, so it also covers manual `/dream` runs. |
 | `PICLAW_DREAM_BACKUP_KEEP` | `10` | Number of pre-Dream note backups to retain |
 | `PICLAW_DREAM_CUE_FULL_SLICE_MAX_MESSAGES` | `50` | `DREAM_CUES` full-slice cutoff for day message count |
 | `PICLAW_DREAM_CUE_FULL_SLICE_MAX_SESSION_TREES` | `2` | `DREAM_CUES` full-slice cutoff for session-tree count |
