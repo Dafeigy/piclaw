@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
-import { WORKSPACE_DIR } from "../core/config.js";
+import { WORKSPACE_DIR, getRuntimeTimingConfig } from "../core/config.js";
 import { getDb } from "../db.js";
 import { createLogger, debugSuppressedError } from "../utils/logger.js";
 
@@ -12,6 +12,13 @@ const INCOMPLETE_WARNING_TITLE = "> ⚠ **Incomplete daily note**";
 const DREAM_CUES_START = "<!-- DREAM_CUES";
 const DREAM_CUES_END = "DREAM_CUES -->";
 const log = createLogger("agent-memory.daily-notes");
+const DREAM_DAY_TIMEZONE = process.env.TZ || getRuntimeTimingConfig().timezone || "UTC";
+const DREAM_DAY_PARTS_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: DREAM_DAY_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 interface FrontMatter {
   fields: Record<string, string>;
@@ -26,7 +33,6 @@ interface Row {
   timestamp: string;
   chat_jid: string;
   root_chat_jid: string;
-  day: string;
 }
 
 interface DailyMessageStats {
@@ -67,10 +73,30 @@ function formatDateLong(iso: string): string {
   });
 }
 
-function todayStr(): string { return new Date().toISOString().slice(0, 10); }
+function formatRuntimeDay(value: string | number | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = DREAM_DAY_PARTS_FORMATTER.formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return date.toISOString().slice(0, 10);
+  return `${year}-${month}-${day}`;
+}
+
+function shiftDay(day: string, deltaDays: number): string {
+  const [year, month, date] = day.split("-").map((value) => Number.parseInt(value, 10));
+  const shifted = new Date(Date.UTC(year, month - 1, date + deltaDays));
+  return shifted.toISOString().slice(0, 10);
+}
+
+function queryCutoffIsoForDay(day: string): string {
+  return `${shiftDay(day, -1)}T00:00:00.000Z`;
+}
+
+function todayStr(): string { return formatRuntimeDay(Date.now()); }
 
 function windowStartDay(days: number): string {
-  return new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  return shiftDay(todayStr(), -days);
 }
 
 function buildDailyMessageStats(day: string, messages: Row[]): DailyMessageStats {
@@ -432,43 +458,68 @@ function resolveScope(chatJid: string): { clause: string; params: string[]; mode
   return { clause: "m.chat_jid = ?", params: [normalized], mode: "chat-only", anchor: normalized };
 }
 
-function loadDailyMessageStatsSince(cutoffIso: string, scope: { clause: string; params: string[] }): Map<string, DailyMessageStats> {
+function loadMessageRowsSince(cutoffIso: string, scope: { clause: string; params: string[] }): Row[] {
   const db = getDb();
-  const rows = db.query<{
-    day: string;
-    first_timestamp: string;
-    last_timestamp: string;
-    total_msgs: number;
-    user_msgs: number;
-    bot_msgs: number;
-    session_trees: number;
-    session_chats: number;
-  }, any[]>(
-    `SELECT substr(m.timestamp, 1, 10) AS day,
-            MIN(m.timestamp) AS first_timestamp,
-            MAX(m.timestamp) AS last_timestamp,
-            COUNT(*) AS total_msgs,
-            SUM(CASE WHEN COALESCE(m.is_bot_message, 0) = 0 THEN 1 ELSE 0 END) AS user_msgs,
-            SUM(CASE WHEN COALESCE(m.is_bot_message, 0) = 1 THEN 1 ELSE 0 END) AS bot_msgs,
-            COUNT(DISTINCT COALESCE(cb.root_chat_jid, m.chat_jid)) AS session_trees,
-            COUNT(DISTINCT m.chat_jid) AS session_chats
+  return db.query<Row, any[]>(
+    `SELECT m.sender_name,
+            COALESCE(m.is_bot_message, 0) AS is_bot_message,
+            m.content,
+            m.timestamp,
+            m.chat_jid,
+            COALESCE(cb.root_chat_jid, m.chat_jid) AS root_chat_jid
      FROM messages m
      LEFT JOIN chat_branches cb ON cb.chat_jid = m.chat_jid
      WHERE ${scope.clause}
        AND m.timestamp >= ?
-     GROUP BY day
-     ORDER BY day ASC`
+     ORDER BY m.timestamp ASC`
   ).all(...scope.params, cutoffIso);
+}
 
-  return new Map(rows.map((row) => [row.day, {
-    day: row.day,
-    firstTimestamp: row.first_timestamp,
-    lastTimestamp: row.last_timestamp,
-    totalMsgs: row.total_msgs,
-    userMsgs: row.user_msgs,
-    botMsgs: row.bot_msgs,
-    sessionTrees: row.session_trees,
-    sessionChats: row.session_chats,
+function loadDailyMessageStatsSince(cutoffDay: string, scope: { clause: string; params: string[] }): Map<string, DailyMessageStats> {
+  const rows = loadMessageRowsSince(queryCutoffIsoForDay(cutoffDay), scope);
+  const stats = new Map<string, {
+    firstTimestamp: string;
+    lastTimestamp: string;
+    totalMsgs: number;
+    userMsgs: number;
+    botMsgs: number;
+    sessionTrees: Set<string>;
+    sessionChats: Set<string>;
+  }>();
+
+  for (const row of rows) {
+    const day = formatRuntimeDay(row.timestamp);
+    if (day < cutoffDay) continue;
+    const current = stats.get(day);
+    if (!current) {
+      stats.set(day, {
+        firstTimestamp: row.timestamp,
+        lastTimestamp: row.timestamp,
+        totalMsgs: 1,
+        userMsgs: row.is_bot_message ? 0 : 1,
+        botMsgs: row.is_bot_message ? 1 : 0,
+        sessionTrees: new Set([row.root_chat_jid]),
+        sessionChats: new Set([row.chat_jid]),
+      });
+      continue;
+    }
+    current.lastTimestamp = row.timestamp;
+    current.totalMsgs += 1;
+    if (row.is_bot_message) current.botMsgs += 1;
+    else current.userMsgs += 1;
+    current.sessionTrees.add(row.root_chat_jid);
+    current.sessionChats.add(row.chat_jid);
+  }
+
+  return new Map([...stats.entries()].map(([day, current]) => [day, {
+    day,
+    firstTimestamp: current.firstTimestamp,
+    lastTimestamp: current.lastTimestamp,
+    totalMsgs: current.totalMsgs,
+    userMsgs: current.userMsgs,
+    botMsgs: current.botMsgs,
+    sessionTrees: current.sessionTrees.size,
+    sessionChats: current.sessionChats.size,
   }]));
 }
 
@@ -487,7 +538,7 @@ export function inspectDailyNoteSummaryBacklog(options?: { recentDays?: number }
   let statsByDay = new Map<string, DailyMessageStats>();
 
   try {
-    statsByDay = loadDailyMessageStatsSince(`${cutoff}T00:00:00.000Z`, allChatsScope);
+    statsByDay = loadDailyMessageStatsSince(cutoff, allChatsScope);
   } catch (error) {
     debugSuppressedError(log, "Failed to inspect message days while checking daily-note backlog.", error, {
       operation: "daily_notes.inspect_backlog.message_days",
@@ -545,29 +596,16 @@ export function refreshDailyNotesFromMessages(options?: { days?: number; chatJid
 
   const dailyNotesDir = getDailyNotesDir();
   mkdirSync(dailyNotesDir, { recursive: true });
-  const db = getDb();
   const scope = resolveScope(chatJid);
-  const params: any[] = [...scope.params];
   const cutoffDay = windowStartDay(days);
-  const cutoffIso = `${cutoffDay}T00:00:00.000Z`;
-  const rows = db.query<Row, any[]>(
-    `SELECT m.sender_name,
-            m.is_bot_message,
-            m.content,
-            m.timestamp,
-            m.chat_jid,
-            COALESCE(cb.root_chat_jid, m.chat_jid) AS root_chat_jid,
-            substr(m.timestamp, 1, 10) AS day
-     FROM messages m
-     LEFT JOIN chat_branches cb ON cb.chat_jid = m.chat_jid
-     WHERE ${scope.clause} AND m.timestamp >= ?
-     ORDER BY m.timestamp ASC`
-  ).all(...params, cutoffIso);
+  const rows = loadMessageRowsSince(queryCutoffIsoForDay(cutoffDay), scope);
 
   const dayMap = new Map<string, Row[]>();
   for (const row of rows) {
-    if (!dayMap.has(row.day)) dayMap.set(row.day, []);
-    dayMap.get(row.day)!.push(row);
+    const day = formatRuntimeDay(row.timestamp);
+    if (day < cutoffDay) continue;
+    if (!dayMap.has(day)) dayMap.set(day, []);
+    dayMap.get(day)!.push(row);
   }
 
   const sortedDays = [...dayMap.keys()].sort();

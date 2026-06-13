@@ -346,12 +346,13 @@ test("inspectDailyNoteSummaryBacklog treats stale complete notes as partial back
   }
 });
 
-test("refreshDailyNotesFromMessages uses UTC day boundaries for the start of the requested window", () => {
+test("refreshDailyNotesFromMessages uses runtime-local day boundaries for grouping and window cutoffs", () => {
   const base = makeTempWorkspace("piclaw-daily-notes-boundary-");
   try {
     const day = "2026-06-11";
-    const firstTs = `${day}T00:03:10.000Z`;
-    const laterTs = `${day}T23:54:04.812Z`;
+    const previousLocalDayTs = "2026-06-11T06:59:00.000Z";
+    const firstTs = "2026-06-11T07:01:00.000Z";
+    const laterTs = "2026-06-12T06:30:00.000Z";
 
     const script = `
       const fixedNow = new Date('2026-06-13T12:00:00.000Z').getTime();
@@ -360,11 +361,20 @@ test("refreshDailyNotesFromMessages uses UTC day boundaries for the start of the
       const { refreshDailyNotesFromMessages } = await import(${JSON.stringify(DAILY_NOTES_MODULE)});
       initDatabase();
       storeMessage({
+        id: 'user-prev',
+        chat_jid: 'telegram:1',
+        sender: 'user',
+        sender_name: 'You',
+        content: 'previous local day message',
+        timestamp: '${previousLocalDayTs}',
+        is_bot_message: false,
+      });
+      storeMessage({
         id: 'user-1',
         chat_jid: 'telegram:1',
         sender: 'user',
         sender_name: 'You',
-        content: 'early retained message',
+        content: 'local midnight retained message',
         timestamp: '${firstTs}',
         is_bot_message: false,
       });
@@ -373,7 +383,7 @@ test("refreshDailyNotesFromMessages uses UTC day boundaries for the start of the
         chat_jid: 'telegram:1',
         sender: 'agent',
         sender_name: 'Assistant',
-        content: 'late retained message',
+        content: 'same local day late-night message',
         timestamp: '${laterTs}',
         is_bot_message: true,
         is_terminal_agent_reply: true,
@@ -382,7 +392,14 @@ test("refreshDailyNotesFromMessages uses UTC day boundaries for the start of the
       console.log(JSON.stringify({ created: out.created, days: out.days }));
     `;
 
-    const proc = Bun.spawnSync([process.execPath, "-e", script], { env: makeEnv(base), stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawnSync([process.execPath, "-e", script], {
+      env: {
+        ...makeEnv(base),
+        TZ: "America/Los_Angeles",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     expect(proc.exitCode, proc.stderr.toString()).toBe(0);
     const result = JSON.parse(proc.stdout.toString().trim().split("\n").pop()!);
     expect(result).toMatchObject({ created: 1, days: [day] });
@@ -391,7 +408,49 @@ test("refreshDailyNotesFromMessages uses UTC day boundaries for the start of the
     expect(note).toContain(`first_message: ${firstTs}`);
     expect(note).toContain(`last_message: ${laterTs}`);
     expect(note).toContain("messages_total: 2");
-    expect(note).toContain("early retained message");
+    expect(note).toContain("local midnight retained message");
+    expect(note).toContain("same local day late-night message");
+    expect(note).not.toContain("previous local day message");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("inspectDailyNoteSummaryBacklog groups missing message days in the runtime timezone", () => {
+  const base = makeTempWorkspace("piclaw-daily-notes-backlog-timezone-");
+  try {
+    const day = "2026-06-11";
+    const localLateNightTs = "2026-06-12T06:30:00.000Z";
+
+    const script = `
+      const fixedNow = new Date('2026-06-13T12:00:00.000Z').getTime();
+      Date.now = () => fixedNow;
+      const { initDatabase, storeMessage } = await import(${JSON.stringify(DB_MODULE)});
+      const { inspectDailyNoteSummaryBacklog } = await import(${JSON.stringify(DAILY_NOTES_MODULE)});
+      initDatabase();
+      storeMessage({
+        id: 'user-1',
+        chat_jid: 'telegram:1',
+        sender: 'user',
+        sender_name: 'You',
+        content: 'late local-day message',
+        timestamp: '${localLateNightTs}',
+        is_bot_message: false,
+      });
+      console.log(JSON.stringify(inspectDailyNoteSummaryBacklog({ recentDays: 2 })));
+    `;
+
+    const proc = Bun.spawnSync([process.execPath, "-e", script], {
+      env: {
+        ...makeEnv(base),
+        TZ: "America/Los_Angeles",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+    const result = JSON.parse(proc.stdout.toString().trim().split("\n").pop()!);
+    expect(result).toMatchObject({ unsummarised: 0, partial: 0, missing_watermark: 0, missing: 1, dates: [day] });
   } finally {
     rmSync(base, { recursive: true, force: true });
   }

@@ -61,6 +61,7 @@ Behavior:
 - Dream work is queued on a dedicated `dream:<chatJid>` lane so it does not block the interactive chat lane
 - a visible agent summary is posted back to the original chat when done
 - default window: last 7 days unless you pass an explicit `/dream <days>`
+- daily-note day boundaries follow the runtime timezone (`TZ` / runtime timing config), not UTC
 
 ### AutoDream
 
@@ -69,6 +70,7 @@ Built-in scheduled task:
 - task id: `builtin-dream-midnight`
 - task kind: `internal`
 - schedule: default cron `0 1 * * *` (01:00 in the runtime timezone)
+- refreshed day slices use that same runtime timezone
 
 Behavior:
 

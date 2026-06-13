@@ -8,6 +8,8 @@ afterEach(() => {
   // no-op: test uses whichever workspace path the current config module has cached
 });
 
+const acceptModelChange = async () => ({ status: "success", message: "ok" } as const);
+
 test("runDreamAgentTurn applies an explicit Dream model override to the temporary dream chat", async () => {
   const config = await import("../src/core/config.js");
   rmSync(join(config.WORKSPACE_DIR, "notes"), { recursive: true, force: true });
@@ -103,6 +105,7 @@ test("runDreamAgentTurn reaps a stale dream lock and materializes memory files a
       days: 2,
       mode: "auto",
       agentPool: {
+        applyControlCommand: acceptModelChange,
         runAgent: async () => ({ status: "success", result: "AutoDream complete." }),
         disposeChatSession: async () => {},
       } as any,
@@ -179,6 +182,7 @@ test("runDreamAgentTurn records recovery summaries when the model pass succeeds 
     days: 2,
     mode: "auto",
     agentPool: {
+      applyControlCommand: acceptModelChange,
       runAgent: async () => ({
         status: "success",
         result: "AutoDream complete.",
@@ -214,6 +218,7 @@ test("runDreamAgentTurn falls back to deterministic refresh when the model pass 
     days: 2,
     mode: "auto",
     agentPool: {
+      applyControlCommand: acceptModelChange,
       runAgent: async (_prompt: string, _chatJid: string, options?: { timeoutMs?: number }) => {
         capturedTimeoutMs = options?.timeoutMs;
         return {
