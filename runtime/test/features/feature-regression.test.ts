@@ -348,7 +348,7 @@ describe("feature: tool catalog", () => {
 
   featureTest("bootstrap tools in default active baseline", async () => {
     const { getDefaultActiveToolNames } = await import("../../src/extensions/tool-activation.js");
-    for (const name of ["list_tools", "activate_tools", "reset_active_tools", "attach_file", "messages", "exit_process"]) {
+    for (const name of ["list_tools", "activate_tools", "reset_active_tools", "attach_file", "messages", "chat", "exit_process"]) {
       expect(getDefaultActiveToolNames("linux")).toContain(name);
     }
   });

@@ -93,6 +93,7 @@ const DEFAULT_ACTIVE_TOOL_NAMES = [
   "reset_active_tools",
   "attach_file",
   "messages",
+  "chat",
   "keychain",
   "exit_process",
   "session_status",
