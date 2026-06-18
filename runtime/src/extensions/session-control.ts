@@ -36,6 +36,7 @@ export interface SessionControlResult {
   source_chat_jid: string;
   target_chat_jid: string;
   target_agent_name?: string | null;
+  target_session_tree?: Record<string, unknown> | null;
   status?: string;
   message?: string;
   assessment?: string;
@@ -65,8 +66,8 @@ const SessionControlSchema = Type.Object({
     Type.Literal("wake"),
     Type.Literal("unblock"),
   ], { description: "Session-control action. Defaults to inspect." })),
-  target_chat_jid: Type.Optional(Type.String({ description: "Target chat JID to inspect or control." })),
-  target_agent_name: Type.Optional(Type.String({ description: "Target agent handle, e.g. research or @research." })),
+  target_chat_jid: Type.Optional(Type.String({ description: "Target chat JID to inspect or control. Fallback only; prefer target_agent_name/@alias so the runtime can resolve the internal session tree." })),
+  target_agent_name: Type.Optional(Type.String({ description: "Preferred target agent handle/alias, e.g. research or @research. Resolves through the internal session tree mapping." })),
   model: Type.Optional(Type.String({ description: "Model label for switch_model, e.g. github-copilot/gpt-5.4." })),
   instructions: Type.Optional(Type.String({ description: "Optional compaction instructions for compact." })),
   force: Type.Optional(Type.Boolean({ description: "Allow higher-risk control action variants where supported." })),
@@ -85,6 +86,7 @@ const HINT = [
   "## Cross-session session control",
   "Use session_control for operational control of another session: inspect, assess_stuck, compact, abort, switch_model, retry_failed, skip_failed, wake, or unblock.",
   "This is intentionally separate from the chat tool. chat relays messages; session_control mutates session runtime state.",
+  "Prefer target_agent_name with an @alias over raw target_chat_jid/session IDs; aliases resolve through the internal Pi session-tree registry.",
   "Prefer inspect or assess_stuck before mutating a target session unless the user explicitly asks you to unblock it.",
 ].join("\n");
 
@@ -117,8 +119,8 @@ export const sessionControl: ExtensionFactory = (pi: ExtensionAPI) => {
   pi.registerTool({
     name: "session_control",
     label: "session_control",
-    description: "Inspect or control another session: assess stuck state, compact, abort, switch model, handle failed runs, wake it, or unblock it.",
-    promptSnippet: "session_control: inspect/assess/compact/abort/switch_model/retry_failed/skip_failed/wake/unblock another session. Separate from chat relay.",
+    description: "Inspect or control another @alias/session: assess stuck state, compact, abort, switch model, handle failed runs, wake it, or unblock it.",
+    promptSnippet: "session_control: inspect/assess/compact/abort/switch_model/retry_failed/skip_failed/wake/unblock another session. Prefer target_agent_name='@alias' over raw chat/session IDs. Separate from chat relay.",
     parameters: SessionControlSchema,
     async execute(_toolCallId, params: SessionControlParams) {
       const sourceChatJid = getChatJid("").trim();
@@ -127,7 +129,7 @@ export const sessionControl: ExtensionFactory = (pi: ExtensionAPI) => {
       const action = params.action || "inspect";
       const targetChatJid = params.target_chat_jid?.trim() || "";
       const targetAgentName = normalizeTargetAgentName(params.target_agent_name);
-      if (!targetChatJid && !targetAgentName) return err("Provide target_chat_jid or target_agent_name.");
+      if (!targetChatJid && !targetAgentName) return err("Provide target_agent_name (@alias preferred) or target_chat_jid.");
       if (targetChatJid && targetAgentName) return err("Provide only one target selector: target_chat_jid or target_agent_name.");
       if (action === "switch_model" && !params.model?.trim()) return err("switch_model requires model.");
 

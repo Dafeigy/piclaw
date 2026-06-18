@@ -28,6 +28,7 @@ test("session_control registers a separate tool from chat with startup guidance"
   const event = await beforeAgentStartHandlers[0]({ systemPrompt: "base" });
   expect(event.systemPrompt).toContain("Cross-session session control");
   expect(event.systemPrompt).toContain("separate from the chat tool");
+  expect(event.systemPrompt).toContain("Prefer target_agent_name with an @alias");
 });
 
 test("session_control requires exactly one target selector", async () => {
@@ -35,7 +36,7 @@ test("session_control requires exactly one target selector", async () => {
   const tool = tools.get("session_control");
   const noTarget = await withChatContext("web:source", "web", () => tool.execute("call-1", { action: "inspect" }));
   expect(noTarget.details.ok).toBe(false);
-  expect(noTarget.details.error).toContain("Provide target_chat_jid");
+  expect(noTarget.details.error).toContain("Provide target_agent_name");
 
   const bothTargets = await withChatContext("web:source", "web", () => tool.execute("call-2", {
     action: "inspect",

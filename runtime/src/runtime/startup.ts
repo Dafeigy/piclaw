@@ -9,6 +9,7 @@ import { WebChannel } from "../channels/web.js";
 import { PushoverChannel } from "../channels/pushover.js";
 import { setMessagesPostFn } from "../extensions/messages-crud.js";
 import { setChatToolRelayFn } from "../extensions/chat-tool.js";
+import { createDirectChatToolRelayHandler } from "../extensions/chat-tool-runtime.js";
 import { setSessionControlHandler, type SessionControlRequest, type SessionControlResult } from "../extensions/session-control.js";
 import { getSessionActivitySnapshot, getSessionIsolationLevel } from "../extensions/session-status.js";
 import {
@@ -18,7 +19,7 @@ import {
   getPushoverConfig,
   getToolOutputConfig,
 } from "../core/config.js";
-import { getChatCursor, getDb, getFailedRun, initDatabase } from "../db.js";
+import { getChatBranchByAgentName, getChatBranchByChatJid, getChatCursor, getDb, getFailedRun, initDatabase } from "../db.js";
 import type { AgentQueue } from "../queue.js";
 import { startToolOutputCleanup } from "../tool-output.js";
 import { createUuid } from "../utils/ids.js";
@@ -342,14 +343,37 @@ function assessSessionSnapshot(snapshot: Record<string, unknown>): string {
   return "idle";
 }
 
-function resolveSessionControlTarget(agentPool: AgentPool, request: SessionControlRequest): { chatJid: string; agentName: string | null } {
+function buildSessionControlTreeDescriptor(branch: {
+  branch_id?: string | null;
+  chat_jid: string;
+  root_chat_jid?: string | null;
+  parent_branch_id?: string | null;
+  agent_name?: string | null;
+}): Record<string, unknown> {
+  return {
+    branch_id: branch.branch_id ?? null,
+    chat_jid: branch.chat_jid,
+    root_chat_jid: branch.root_chat_jid ?? branch.chat_jid,
+    parent_branch_id: branch.parent_branch_id ?? null,
+    agent_name: branch.agent_name ?? null,
+  };
+}
+
+function resolveSessionControlTarget(agentPool: AgentPool, request: SessionControlRequest): { chatJid: string; agentName: string | null; sessionTree: Record<string, unknown> | null } {
   const chatJid = request.target_chat_jid?.trim();
-  if (chatJid) return { chatJid, agentName: null };
+  if (chatJid) {
+    const branch = getChatBranchByChatJid(chatJid) || agentPool.listKnownChats().find((chat) => chat.chat_jid === chatJid) || null;
+    if (!branch) throw new Error(`No chat session found for ${chatJid}. Prefer target_agent_name (@alias) when available.`);
+    return { chatJid: branch.chat_jid, agentName: branch.agent_name || null, sessionTree: buildSessionControlTreeDescriptor(branch) };
+  }
   const agentName = String(request.target_agent_name || "").trim().replace(/^@+/, "").trim();
-  if (!agentName) throw new Error("Provide target_chat_jid or target_agent_name.");
+  if (!agentName) throw new Error("Provide target_agent_name (@alias preferred) or target_chat_jid.");
+  const branch = getChatBranchByAgentName(agentName) || null;
+  if (branch) return { chatJid: branch.chat_jid, agentName: branch.agent_name || agentName, sessionTree: buildSessionControlTreeDescriptor(branch) };
   const found = agentPool.findChatByAgentName(agentName);
   if (!found?.chat_jid) throw new Error(`No chat session found for @${agentName}.`);
-  return { chatJid: found.chat_jid, agentName: found.agent_name || agentName };
+  const known = agentPool.listKnownChats().find((chat) => chat.chat_jid === found.chat_jid) || found;
+  return { chatJid: found.chat_jid, agentName: found.agent_name || agentName, sessionTree: buildSessionControlTreeDescriptor(known) };
 }
 
 function registerSessionControlHandler(agentPool: AgentPool, web: WebChannel): void {
@@ -361,6 +385,7 @@ function registerSessionControlHandler(agentPool: AgentPool, web: WebChannel): v
       source_chat_jid: request.source_chat_jid,
       target_chat_jid: target.chatJid,
       target_agent_name: target.agentName,
+      target_session_tree: target.sessionTree,
     };
     const before = await buildSessionControlSnapshot(agentPool, target.chatJid);
 
@@ -506,33 +531,11 @@ export async function startWebChannel(queue: AgentQueue, agentPool: AgentPool): 
     return interaction.id;
   });
 
-  // Wire the cross-session chat tool through the existing peer-message route so
-  // the target chat gets normal inbound-message semantics (queue/defer/steer).
-  setChatToolRelayFn(async (payload) => {
-    const req = new Request("http://internal/agent/peer-message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const res = await web.handleRequest(req);
-    const body = await res.json().catch(() => ({} as Record<string, unknown>));
-    if (!res.ok) {
-      const message = typeof body.error === "string" ? body.error : `Cross-session chat relay failed (${res.status}).`;
-      throw new Error(message);
-    }
-    return body as {
-      status?: string;
-      relayed?: boolean;
-      source_chat_jid: string;
-      source_agent_name?: string;
-      target_chat_jid: string;
-      target_agent_name?: string;
-      row_id?: number | null;
-      queued?: string;
-      thread_id?: number | null;
-      created?: boolean;
-    };
-  });
+  // Wire the cross-session chat tool directly to the target chat message route.
+  // Do not use the web peer relay endpoint here: the tool runs with a trusted current
+  // chat context, so sender and destination identities are resolved and checked
+  // locally before delivery to avoid spoofing.
+  setChatToolRelayFn(createDirectChatToolRelayHandler(agentPool, web));
 
   // Wire session_control separately from chat relay. This tool controls target
   // session runtime state (inspect/compact/abort/model/failed-run/wake).
