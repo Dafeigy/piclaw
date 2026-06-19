@@ -1,4 +1,5 @@
 import { html, useCallback, useEffect, useMemo, useRef, useState } from '../vendor/preact-htm.js';
+import { BrowserPreview } from './browser-preview.js';
 import { renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 import { getLocalStorageBoolean, getLocalStorageItem, getLocalStorageNumber, setLocalStorageItem } from '../utils/storage.js';
 import {
@@ -648,6 +649,9 @@ export function WorkspaceExplorer({
     const [pwaDisplayScalePercent, setPwaDisplayScalePercent] = useState(() => readStoredPwaDisplayScalePercent());
     const [pwaDisplayScaleDraft, setPwaDisplayScaleDraft] = useState(() => String(readStoredPwaDisplayScalePercent()));
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+    const [sidebarTab, setSidebarTab] = useState(() =>
+        getLocalStorageItem('sidebarActiveTab') || 'files',
+    );
     const refreshIntervalMs = Math.max(15000, (Number(workspaceClientSettings?.refreshIntervalSec) || 60) * 1000);
     const folderPreviewDepth = Math.max(0, Number(workspaceClientSettings?.folderPreviewDepth) || 0);
 
@@ -2317,6 +2321,17 @@ export function WorkspaceExplorer({
             onDragLeave=${handleDragLeave}
             onDrop=${handleDrop}
         >
+            <div class="workspace-tab-bar">
+                <button
+                    class=${`workspace-tab${sidebarTab === 'files' ? ' active' : ''}`}
+                    onClick=${() => { setSidebarTab('files'); setLocalStorageItem('sidebarActiveTab', 'files'); }}
+                >📁 Files</button>
+                <button
+                    class=${`workspace-tab${sidebarTab === 'browser' ? ' active' : ''}`}
+                    onClick=${() => { setSidebarTab('browser'); setLocalStorageItem('sidebarActiveTab', 'browser'); }}
+                >🌐 Browser</button>
+            </div>
+            ${sidebarTab === 'files' && html`
             <input type="file" multiple style="display:none" ref=${uploadInputRef} onChange=${handleUploadInputChange} />
             <div class="workspace-header">
                 <div class="workspace-header-left">
@@ -2688,6 +2703,10 @@ export function WorkspaceExplorer({
             `}
             ${dragGhost && html`
                 <div class="workspace-drag-ghost" ref=${dragGhostRef}>${dragGhost.label}</div>
+            `}
+            `}
+            ${sidebarTab === 'browser' && html`
+                <${BrowserPreview} visible=${true} />
             `}
         </aside>
     `;

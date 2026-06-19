@@ -1134,3 +1134,87 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ── Workspace sidebar tab bar ──────────────────────────── */
+.workspace-tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border-color, rgba(148,163,184,.15));
+    flex-shrink: 0;
+}
+.workspace-tab {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    background: transparent;
+    color: var(--text-secondary, #94a3b8);
+    border: none;
+    cursor: pointer;
+    transition: color 0.15s, box-shadow 0.15s;
+    border-radius: 0;
+    line-height: 1.4;
+}
+.workspace-tab.active {
+    color: var(--text-primary, #e2e8f0);
+    box-shadow: inset 0 -2px 0 var(--accent-color, #1d9bf0);
+}
+.workspace-tab:hover:not(.active) {
+    color: var(--text-primary, #e2e8f0);
+}
+
+/* ── Browser preview ──────────────────────────────────────  */
+.browser-preview {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-primary, #0f1117);
+}
+.browser-preview-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color, rgba(148,163,184,.15));
+    flex-shrink: 0;
+}
+.browser-btn {
+    appearance: none;
+    border: none;
+    background: rgba(148,163,184,.12);
+    color: var(--text-primary, #e2e8f0);
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.browser-btn:hover {
+    background: rgba(148,163,184,.2);
+}
+.browser-url-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', monospace;
+    background: var(--surface-color, rgba(148,163,184,.12));
+    color: var(--text-primary, #e2e8f0);
+    border: 1px solid var(--border-color, rgba(148,163,184,.15));
+    border-radius: 4px;
+    outline: none;
+}
+.browser-url-input:focus {
+    border-color: var(--accent-color, #1d9bf0);
+}
+.browser-go-btn {
+    font-weight: 600;
+    min-width: 32px;
+}
+.browser-iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #fff;
+}

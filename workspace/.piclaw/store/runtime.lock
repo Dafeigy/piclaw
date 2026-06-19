@@ -1,0 +1,6 @@
+{
+  "pid": 73,
+  "startedAt": "2026-06-19T17:31:28.495Z",
+  "workspace": "/workspace",
+  "command": "/usr/local/lib/bun/bin/bun /usr/local/lib/bun/install/global/node_modules/piclaw/runtime/src/index.ts --port 8080"
+}

@@ -58,7 +58,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy":
     "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' https: http: data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; " +
-    "frame-src 'self'; " +
+    "frame-src 'self' http: https:; " +
     "frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
 };
 
