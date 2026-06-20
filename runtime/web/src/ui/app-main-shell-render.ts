@@ -121,6 +121,7 @@ export function renderMainShell(options: MainShellRenderOptions): any {
     openEditor,
     openTerminalTab,
     openVncTab,
+    openBrowserTab,
     hasDockPanes,
     toggleDock,
     dockVisible,
@@ -334,6 +335,7 @@ export function renderMainShell(options: MainShellRenderOptions): any {
           onOpenEditor=${openEditor}
           onOpenTerminalTab=${openTerminalTab}
           onOpenVncTab=${openVncTab}
+          onOpenBrowserTab=${openBrowserTab}
         />
         <button
           class=${`workspace-toggle-tab${workspaceOpen ? ' open' : ' closed'}`}

@@ -12,6 +12,7 @@ import {
   dataViewerPaneExtension,
   webViewerPaneExtension,
   highlightPreviewerPaneExtension,
+  browserTabPaneExtension,
 } from '../panes/index.js';
 import {
   installAddonWebApi,
@@ -62,6 +63,7 @@ export function registerAppPaneExtensions(): void {
   paneRegistry.register(webViewerPaneExtension);
   paneRegistry.register(highlightPreviewerPaneExtension);
   paneRegistry.register(vncPaneExtension);
+  paneRegistry.register(browserTabPaneExtension);
   preloadEditorBundle();
   paneRegistry.register(terminalPaneExtension);
   paneRegistry.register(terminalTabPaneExtension);

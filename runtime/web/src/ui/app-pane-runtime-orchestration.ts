@@ -50,6 +50,7 @@ interface UsePaneRuntimeOrchestrationOptions {
   tabPaneOverrides: Map<string, string> | Record<string, string>;
   terminalTabPath: string;
   vncTabPrefix: string;
+  browserTabPath: string;
   openEditor: (path: string, options?: Record<string, unknown>) => void;
   closeEditor: () => void;
   getWorkspaceFile: (path: string, maxBytes: number, mode: string) => Promise<any>;
@@ -331,6 +332,7 @@ export function usePaneRuntimeOrchestration(options: UsePaneRuntimeOrchestration
     tabPaneOverrides,
     terminalTabPath,
     vncTabPrefix,
+    browserTabPath,
     openEditor,
     closeEditor,
     getWorkspaceFile,
@@ -390,6 +392,10 @@ export function usePaneRuntimeOrchestration(options: UsePaneRuntimeOrchestration
   const openVncTab = useCallback(() => {
     openEditor(vncTabPrefix, { label: 'VNC' });
   }, [openEditor, vncTabPrefix]);
+
+  const openBrowserTab = useCallback(() => {
+    openEditor(browserTabPath, { label: 'Browser' });
+  }, [openEditor, browserTabPath]);
 
   const ensurePaneInstanceId = useCallback((panePath: string) => {
     const normalizedPath = typeof panePath === 'string' ? panePath.trim() : '';
@@ -1262,6 +1268,7 @@ export function usePaneRuntimeOrchestration(options: UsePaneRuntimeOrchestration
     toggleDock,
     openTerminalTab,
     openVncTab,
+    openBrowserTab,
     panePopoutTitle,
     panePopoutHasMenuActions,
     hidePanePopoutControls,

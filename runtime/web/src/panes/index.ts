@@ -15,5 +15,6 @@ export { officeViewerPaneExtension } from './office-viewer-pane.js';
 export { dataViewerPaneExtension } from './data-viewer-pane.js';
 export { webViewerPaneExtension } from './web-viewer-pane.js';
 export { highlightPreviewerPaneExtension } from './highlight-previewer-pane.js';
+export { browserTabPaneExtension, BROWSER_TAB_PATH } from './browser-pane.js';
 export type { TabState, TabViewState } from './tab-store.js';
 export { tabStore } from './tab-store.js';

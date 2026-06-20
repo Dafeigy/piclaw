@@ -21,6 +21,7 @@ export function useMainAppPaneComposition(options: {
   chatOnlyMode: boolean;
   terminalTabPath: string;
   vncTabPrefix: string;
+  browserTabPath: string;
   getWorkspaceFile: (path: string, maxBytes: number, mode: string) => Promise<any>;
 }) {
   const removeFileRefRef = useRef<any>(null);
@@ -42,6 +43,7 @@ export function useMainAppPaneComposition(options: {
     tabPaneOverrides: editorState.tabPaneOverrides,
     terminalTabPath: options.terminalTabPath,
     vncTabPrefix: options.vncTabPrefix,
+    browserTabPath: options.browserTabPath,
     openEditor: editorState.openEditor,
     closeEditor: editorState.closeEditor,
     getWorkspaceFile: options.getWorkspaceFile,

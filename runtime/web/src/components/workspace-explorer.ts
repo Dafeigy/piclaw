@@ -1,5 +1,4 @@
 import { html, useCallback, useEffect, useMemo, useRef, useState } from '../vendor/preact-htm.js';
-import { BrowserPreview } from './browser-preview.js';
 import { renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 import { getLocalStorageBoolean, getLocalStorageItem, getLocalStorageNumber, setLocalStorageItem } from '../utils/storage.js';
 import {
@@ -619,6 +618,7 @@ export function WorkspaceExplorer({
     onOpenEditor,
     onOpenTerminalTab,
     onOpenVncTab,
+    onOpenBrowserTab,
 }) {
     const [tree,          setTree]          = useState(null);
     const [expanded,      setExpanded]      = useState(new Set(['.']));
@@ -649,9 +649,6 @@ export function WorkspaceExplorer({
     const [pwaDisplayScalePercent, setPwaDisplayScalePercent] = useState(() => readStoredPwaDisplayScalePercent());
     const [pwaDisplayScaleDraft, setPwaDisplayScaleDraft] = useState(() => String(readStoredPwaDisplayScalePercent()));
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
-    const [sidebarTab, setSidebarTab] = useState(() =>
-        getLocalStorageItem('sidebarActiveTab') || 'files',
-    );
     const refreshIntervalMs = Math.max(15000, (Number(workspaceClientSettings?.refreshIntervalSec) || 60) * 1000);
     const folderPreviewDepth = Math.max(0, Number(workspaceClientSettings?.folderPreviewDepth) || 0);
 
@@ -2223,6 +2220,11 @@ export function WorkspaceExplorer({
         onOpenVncTab?.();
     }, [closeHeaderMenu, onOpenVncTab]);
 
+    const handleMenuOpenBrowserTab = useCallback(() => {
+        closeHeaderMenu();
+        onOpenBrowserTab?.();
+    }, [closeHeaderMenu, onOpenBrowserTab]);
+
     const handleMenuOpenSettings = useCallback(() => {
         runMenuAction(() => window.dispatchEvent(new CustomEvent('piclaw:open-settings')));
     }, [runMenuAction]);
@@ -2321,17 +2323,7 @@ export function WorkspaceExplorer({
             onDragLeave=${handleDragLeave}
             onDrop=${handleDrop}
         >
-            <div class="workspace-tab-bar">
-                <button
-                    class=${`workspace-tab${sidebarTab === 'files' ? ' active' : ''}`}
-                    onClick=${() => { setSidebarTab('files'); setLocalStorageItem('sidebarActiveTab', 'files'); }}
-                >📁 Files</button>
-                <button
-                    class=${`workspace-tab${sidebarTab === 'browser' ? ' active' : ''}`}
-                    onClick=${() => { setSidebarTab('browser'); setLocalStorageItem('sidebarActiveTab', 'browser'); }}
-                >🌐 Browser</button>
-            </div>
-            ${sidebarTab === 'files' && html`
+            ${/* sidebar tab bar removed — browser is now a tab pane */ ''}
             <input type="file" multiple style="display:none" ref=${uploadInputRef} onChange=${handleUploadInputChange} />
             <div class="workspace-header">
                 <div class="workspace-header-left">
@@ -2404,7 +2396,7 @@ export function WorkspaceExplorer({
                                     </div>
                                 </div>
 
-                                ${(onOpenTerminalTab || onOpenVncTab) && html`<div class="workspace-menu-separator"></div>`}
+                                ${(onOpenTerminalTab || onOpenVncTab || onOpenBrowserTab) && html`<div class="workspace-menu-separator"></div>`}
                                 ${onOpenTerminalTab && html`
                                     <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuOpenTerminalTab}>
                                         Open terminal in tab
@@ -2413,6 +2405,11 @@ export function WorkspaceExplorer({
                                 ${onOpenVncTab && html`
                                     <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuOpenVncTab}>
                                         Open VNC in tab
+                                    </button>
+                                `}
+                                ${onOpenBrowserTab && html`
+                                    <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuOpenBrowserTab}>
+                                        Open browser in tab
                                     </button>
                                 `}
                                 <div class="workspace-menu-separator"></div>
@@ -2450,6 +2447,21 @@ export function WorkspaceExplorer({
                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <line x1="12" y1="5" x2="12" y2="19" />
                             <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                    </button>
+                    <button class="workspace-create" onClick=${() => onOpenBrowserTab?.()} title="Open browser" disabled=${uploading}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                    </button>
+                    <button class="workspace-create" onClick=${() => onOpenTerminalTab?.()} title="Open terminal in tab" disabled=${uploading}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="4" y="3" width="16" height="18" rx="2" />
+                            <polyline points="7 17 12 12 7 7" />
                         </svg>
                     </button>
                     <button class="workspace-refresh" onClick=${handleRefreshClick} title="Refresh tree">
@@ -2703,10 +2715,6 @@ export function WorkspaceExplorer({
             `}
             ${dragGhost && html`
                 <div class="workspace-drag-ghost" ref=${dragGhostRef}>${dragGhost.label}</div>
-            `}
-            `}
-            ${sidebarTab === 'browser' && html`
-                <${BrowserPreview} visible=${true} />
             `}
         </aside>
     `;
