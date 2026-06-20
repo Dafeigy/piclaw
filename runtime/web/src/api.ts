@@ -970,6 +970,25 @@ export async function createWorkspaceFile(path, name, content = '') {
     return response.json();
 }
 
+/** Create a new folder in the workspace. */
+export async function createWorkspaceFolder(path, name) {
+    const response = await fetch(API_BASE + '/workspace/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, name }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Create folder failed' }));
+        const err = new Error(error.error || `HTTP ${response.status}`) as ApiError;
+        err.status = response.status;
+        err.code = error.code;
+        throw err;
+    }
+
+    return response.json();
+}
+
 /** Rename a workspace file or folder. */
 export async function renameWorkspaceFile(path, name) {
     const response = await fetch(API_BASE + '/workspace/rename', {

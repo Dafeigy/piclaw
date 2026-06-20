@@ -95,6 +95,15 @@ export class WorkspaceService {
     return result;
   }
 
+  createFolder(pathParam: string | null, nameParam: string | null) {
+    const result = this.fileService.createFolder(pathParam, nameParam);
+    if (result.status === 201) {
+      const body = result.body as { path?: string } | undefined;
+      this.markIndexStale([body?.path]);
+    }
+    return result;
+  }
+
   renameFile(pathParam: string | null, nameParam: string | null) {
     const result = this.fileService.renameFile(pathParam, nameParam);
     if (result.status === 200) {

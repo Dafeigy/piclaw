@@ -379,6 +379,27 @@ export async function handleWorkspaceRename(req: Request): Promise<Response> {
 }
 
 /**
+ * Handle POST `/workspace/folder` requests to create a new folder.
+ * @param req Incoming HTTP request containing JSON `{ path, name }`.
+ * @returns JSON response with creation outcome or validation errors.
+ */
+export async function handleWorkspaceCreateFolder(req: Request): Promise<Response> {
+  let data: { path?: string; name?: string };
+  try {
+    data = await req.json();
+  } catch {
+    return errorJson("Invalid JSON", 400);
+  }
+
+  if (!data?.name) {
+    return errorJson("Missing folder name", 400);
+  }
+
+  const result = workspaceService.createFolder(data.path ?? null, data.name ?? null);
+  return jsonResponse(result.body, result.status);
+}
+
+/**
  * Handle POST `/workspace/move` requests to move a file or folder.
  * @param req Incoming HTTP request containing JSON `{ path, target }`.
  * @returns JSON response with move result or validation errors.

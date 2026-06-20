@@ -1190,3 +1190,146 @@
     border: none;
     background: #fff;
 }
+
+/* ── New file dialog ─────────────────────────────────────  */
+
+.new-file-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.new-file-dialog {
+    background: var(--bg-primary, #0f1117);
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.15));
+    border-radius: 8px;
+    padding: 20px 24px;
+    min-width: 360px;
+    max-width: 440px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.new-file-dialog-header {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary, #e2e8f0);
+    margin-bottom: 6px;
+}
+
+.new-file-dialog-folder {
+    font-size: 12px;
+    color: var(--text-secondary, #94a3b8);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    margin-bottom: 14px;
+    background: var(--surface-color, rgba(148, 163, 184, 0.08));
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.new-file-dialog-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', monospace;
+    background: var(--surface-color, rgba(148, 163, 184, 0.12));
+    color: var(--text-primary, #e2e8f0);
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.15));
+    border-radius: 6px;
+    outline: none;
+    margin-bottom: 16px;
+}
+
+.new-file-dialog-input:focus {
+    border-color: var(--accent-color, #1d9bf0);
+}
+
+.new-file-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.new-file-dialog-cancel,
+.new-file-dialog-create {
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.new-file-dialog-cancel {
+    background: var(--surface-color, rgba(148, 163, 184, 0.12));
+    color: var(--text-primary, #e2e8f0);
+}
+
+.new-file-dialog-cancel:hover {
+    background: rgba(148, 163, 184, 0.2);
+}
+
+.new-file-dialog-create {
+    background: var(--accent-color, #1d9bf0);
+    color: var(--accent-contrast-text, #fff);
+}
+
+.new-file-dialog-create:hover:not(:disabled) {
+    background: var(--accent-hover, #1a8cd8);
+}
+
+.new-file-dialog-create:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* ── Create popover menu ───────────────────────────────────  */
+
+.workspace-create-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.workspace-create-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    min-width: 150px;
+    background: var(--bg-primary, #0f1117);
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.15));
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    overflow: hidden;
+}
+
+.workspace-create-menu .workspace-menu-item {
+    display: block;
+    width: 100%;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    background: transparent;
+    color: var(--text-primary, #e2e8f0);
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s;
+}
+
+.workspace-create-menu .workspace-menu-item:hover {
+    background: var(--surface-color, rgba(148, 163, 184, 0.12));
+}

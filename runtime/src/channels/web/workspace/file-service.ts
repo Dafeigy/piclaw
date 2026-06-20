@@ -783,6 +783,52 @@ export class WorkspaceFileService {
     }
   }
 
+  createFolder(
+    pathParam: string | null,
+    nameParam: string | null,
+  ): { status: number; body: unknown } {
+    const targetDir = resolveWorkspacePath(pathParam);
+    if (!targetDir) return { status: 400, body: { error: "Invalid path" } };
+    if (isEscapedExistingWorkspacePath(targetDir)) {
+      return { status: 400, body: { error: "Invalid path" } };
+    }
+
+    const dirname = normalizeEntryName(nameParam);
+    if (!dirname) return { status: 400, body: { error: "Invalid folder name" } };
+
+    try {
+      const stats = statSync(targetDir);
+      if (!stats.isDirectory()) {
+        return { status: 400, body: { error: "Path is not a directory" } };
+      }
+    } catch {
+      return { status: 404, body: { error: "Directory not found" } };
+    }
+
+    const destPath = path.join(targetDir, dirname);
+    if (existsSync(destPath)) {
+      if (!isRealWorkspacePath(destPath)) {
+        return { status: 400, body: { error: "Invalid path" } };
+      }
+      return { status: 409, body: { error: "Folder already exists", code: "file_exists" } };
+    }
+
+    try {
+      mkdirSync(destPath);
+      const relPath = toRelativePath(destPath);
+      return {
+        status: 201,
+        body: {
+          path: relPath,
+          name: dirname,
+          type: "dir",
+        },
+      };
+    } catch {
+      return { status: 500, body: { error: "Failed to create folder" } };
+    }
+  }
+
   renameFile(pathParam: string | null, nameParam: string | null): { status: number; body: unknown } {
     const targetPath = resolveWorkspacePath(pathParam);
     if (!targetPath) return { status: 400, body: { error: "Invalid path" } };

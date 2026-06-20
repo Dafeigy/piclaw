@@ -6,6 +6,7 @@ import {
   handleWorkspaceAttach,
   handleWorkspaceBranch,
   handleWorkspaceCreate,
+  handleWorkspaceCreateFolder,
   handleWorkspaceDelete,
   handleWorkspaceDownload,
   handleWorkspaceFile,
@@ -49,6 +50,8 @@ export interface WorkspaceDispatchChannel {
   handleWorkspaceUploadChunk?(req: Request): Promise<Response>;
   /** Optional override for POST `/workspace/file` create requests. */
   handleWorkspaceCreate?(req: Request): Promise<Response>;
+  /** Optional override for POST `/workspace/folder` create requests. */
+  handleWorkspaceCreateFolder?(req: Request): Promise<Response>;
   /** Optional override for POST `/workspace/rename` requests. */
   handleWorkspaceRename?(req: Request): Promise<Response>;
   /** Optional override for POST `/workspace/move` requests. */
@@ -119,6 +122,10 @@ export async function handleWorkspaceRoutes(
 
   if (req.method === "POST" && pathname === "/workspace/file") {
     return await (channel.handleWorkspaceCreate?.(req) ?? handleWorkspaceCreate(req));
+  }
+
+  if (req.method === "POST" && pathname === "/workspace/folder") {
+    return await (channel.handleWorkspaceCreateFolder?.(req) ?? handleWorkspaceCreateFolder(req));
   }
 
   if (req.method === "POST" && pathname === "/workspace/rename") {

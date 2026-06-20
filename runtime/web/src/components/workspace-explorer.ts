@@ -1,8 +1,10 @@
 import { html, useCallback, useEffect, useMemo, useRef, useState } from '../vendor/preact-htm.js';
+import { BodyPortal } from './body-portal.js';
 import { renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 import { getLocalStorageBoolean, getLocalStorageItem, getLocalStorageNumber, setLocalStorageItem } from '../utils/storage.js';
 import {
     createWorkspaceFile,
+    createWorkspaceFolder,
     deleteWorkspaceFile,
     getWorkspaceDownloadUrl,
     getWorkspaceFile,
@@ -649,6 +651,9 @@ export function WorkspaceExplorer({
     const [pwaDisplayScalePercent, setPwaDisplayScalePercent] = useState(() => readStoredPwaDisplayScalePercent());
     const [pwaDisplayScaleDraft, setPwaDisplayScaleDraft] = useState(() => String(readStoredPwaDisplayScalePercent()));
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+    const [newFileDialog, setNewFileDialog] = useState(null);
+    const [newFolderDialog, setNewFolderDialog] = useState(null);
+    const [createMenuOpen, setCreateMenuOpen] = useState(null);
     const refreshIntervalMs = Math.max(15000, (Number(workspaceClientSettings?.refreshIntervalSec) || 60) * 1000);
     const folderPreviewDepth = Math.max(0, Number(workspaceClientSettings?.folderPreviewDepth) || 0);
 
@@ -956,6 +961,34 @@ export function WorkspaceExplorer({
         };
     }, [headerMenuOpen]);
 
+    useEffect(() => {
+        if (!createMenuOpen) return undefined;
+
+        const handleDocPointer = (event) => {
+            const target = event?.target;
+            if (!(target instanceof Element)) return;
+            if (target.closest('.workspace-create-menu')) return;
+            if (target.closest('.workspace-create')) return;
+            setCreateMenuOpen(null);
+        };
+
+        const handleEscape = (event) => {
+            if (event?.key === 'Escape') {
+                setCreateMenuOpen(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleDocPointer);
+        document.addEventListener('touchstart', handleDocPointer, { passive: true });
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', handleDocPointer);
+            document.removeEventListener('touchstart', handleDocPointer);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [createMenuOpen]);
+
     // ── loadPreview ───────────────────────────────────────────────────────────
     const loadPreview = async (path, options = {}) => {
         const autoOpen = Boolean(options?.autoOpen);
@@ -1234,44 +1267,79 @@ export function WorkspaceExplorer({
         }
     }, [cancelRename, renameValue, refreshWorkspaceIndexStatus]);
 
-    const createUntitledFile = useCallback(async (targetPath) => {
-        const base = 'untitled';
-        const ext = '.md';
-        const folder = targetPath || '.';
-
-        for (let i = 0; i < 50; i += 1) {
-            const suffix = i === 0 ? '' : `-${i}`;
-            const name = `${base}${suffix}${ext}`;
-            try {
-                const result = await createWorkspaceFile(folder, name, '');
-                const nextPath = result?.path || (folder === '.' ? name : `${folder}/${name}`);
-                if (folder && folder !== '.') {
-                    setExpanded((prev) => new Set([...prev, folder]));
-                }
-                setSelectedPath(nextPath);
-                setError(null);
-                loadSubtreeRef.current?.(folder);
-                loadPreviewRef.current?.(nextPath);
-                refreshWorkspaceIndexStatus();
-                return;
-            } catch (err) {
-                if (err?.status === 409 || err?.code === 'file_exists') {
-                    continue;
-                }
-                setError(err?.message || 'Failed to create file');
-                return;
-            }
-        }
-
-        setError('Failed to create file (untitled name already in use).');
+    const openNewFileDialog = useCallback((folder) => {
+        setNewFileDialog({ folder });
     }, []);
 
-    const handleCreateFileClick = useCallback((event) => {
+    const openNewFolderDialog = useCallback((folder) => {
+        setNewFolderDialog({ folder });
+    }, []);
+
+    const handleCreateClick = useCallback((event, source = 'header') => {
         event?.stopPropagation?.();
         if (uploading) return;
         const target = resolveCreateTargetPath(selectedPathRef.current);
-        createUntitledFile(target);
-    }, [uploading, resolveCreateTargetPath, createUntitledFile]);
+        if (createMenuOpen && createMenuOpen.folder === target && createMenuOpen.source === source) {
+            setCreateMenuOpen(null);
+        } else {
+            setCreateMenuOpen({ folder: target, source });
+        }
+    }, [uploading, resolveCreateTargetPath, createMenuOpen]);
+
+    const commitNewFileDialog = useCallback(async (name) => {
+        const { folder } = newFileDialog || {};
+        if (!name || !folder) return;
+        setNewFileDialog(null);
+        try {
+            const result = await createWorkspaceFile(folder, name, '');
+            const nextPath = result?.path || (folder === '.' ? name : `${folder}/${name}`);
+            if (folder && folder !== '.') {
+                setExpanded((prev) => new Set([...prev, folder]));
+            }
+            setSelectedPath(nextPath);
+            setError(null);
+            loadSubtreeRef.current?.(folder);
+            loadPreviewRef.current?.(nextPath);
+            refreshWorkspaceIndexStatus();
+        } catch (err) {
+            if (err?.status === 409 || err?.code === 'file_exists') {
+                setError('A file with that name already exists.');
+            } else {
+                setError(err?.message || 'Failed to create file');
+            }
+        }
+    }, [newFileDialog, refreshWorkspaceIndexStatus]);
+
+    const cancelNewFileDialog = useCallback(() => {
+        setNewFileDialog(null);
+    }, []);
+
+    const commitNewFolderDialog = useCallback(async (name) => {
+        const { folder } = newFolderDialog || {};
+        if (!name || !folder) return;
+        setNewFolderDialog(null);
+        try {
+            const result = await createWorkspaceFolder(folder, name);
+            const nextPath = result?.path || (folder === '.' ? name : `${folder}/${name}`);
+            if (folder && folder !== '.') {
+                setExpanded((prev) => new Set([...prev, folder]));
+            }
+            setSelectedPath(nextPath);
+            setError(null);
+            loadSubtreeRef.current?.(folder);
+            refreshWorkspaceIndexStatus();
+        } catch (err) {
+            if (err?.status === 409 || err?.code === 'file_exists') {
+                setError('A folder with that name already exists.');
+            } else {
+                setError(err?.message || 'Failed to create folder');
+            }
+        }
+    }, [newFolderDialog, refreshWorkspaceIndexStatus]);
+
+    const cancelNewFolderDialog = useCallback(() => {
+        setNewFolderDialog(null);
+    }, []);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -2164,8 +2232,12 @@ export function WorkspaceExplorer({
     }, [uploading]);
 
     const handleMenuCreateFile = useCallback(() => {
-        runMenuAction(() => handleCreateFileClick(null));
-    }, [runMenuAction, handleCreateFileClick]);
+        runMenuAction(() => openNewFileDialog(resolveCreateTargetPath(selectedPathRef.current)));
+    }, [runMenuAction, openNewFileDialog, resolveCreateTargetPath]);
+
+    const handleMenuCreateFolder = useCallback(() => {
+        runMenuAction(() => openNewFolderDialog(resolveCreateTargetPath(selectedPathRef.current)));
+    }, [runMenuAction, openNewFolderDialog, resolveCreateTargetPath]);
 
     const handleMenuUploadFiles = useCallback(() => {
         runMenuAction(() => handleUploadButtonClick());
@@ -2350,6 +2422,7 @@ export function WorkspaceExplorer({
                         ${headerMenuOpen && html`
                             <div class="workspace-menu-dropdown" ref=${headerMenuRef} role="menu" aria-label="Workspace options">
                                 <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuCreateFile} disabled=${uploading}>New file</button>
+                                <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuCreateFolder} disabled=${uploading}>New folder</button>
                                 <button class="workspace-menu-item" role="menuitem" onClick=${handleMenuUploadFiles} disabled=${uploading}>Upload files</button>
                                 ${(() => {
                                     const recent = getRecentFiles();
@@ -2442,13 +2515,21 @@ export function WorkspaceExplorer({
                     <span>Workspace</span>
                 </div>
                 <div class="workspace-header-actions">
-                    <button class="workspace-create" onClick=${handleCreateFileClick} title="New file" disabled=${uploading}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                    </button>
+                    <div class="workspace-create-wrap">
+                        <button class="workspace-create" onClick=${(e) => handleCreateClick(e, 'header')} title="Create file or folder" disabled=${uploading}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                        </button>
+                        ${createMenuOpen?.source === 'header' && html`
+                            <div class="workspace-create-menu">
+                                <button class="workspace-menu-item" role="menuitem" onClick=${() => { setCreateMenuOpen(null); openNewFileDialog(createMenuOpen.folder); }}>📄 New file</button>
+                                <button class="workspace-menu-item" role="menuitem" onClick=${() => { setCreateMenuOpen(null); openNewFolderDialog(createMenuOpen.folder); }}>📁 New folder</button>
+                            </div>
+                        `}
+                    </div>
                     <button class="workspace-create" onClick=${() => onOpenBrowserTab?.()} title="Open browser" disabled=${uploading}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -2614,13 +2695,21 @@ export function WorkspaceExplorer({
                     <div class="workspace-preview-header">
                         <span class="workspace-preview-title">${selectedPath}</span>
                         <div class="workspace-preview-actions">
-                            <button class="workspace-create" onClick=${handleCreateFileClick} title="New file" disabled=${uploading}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                            </button>
+                            <div class="workspace-create-wrap">
+                                <button class="workspace-create" onClick=${(e) => handleCreateClick(e, 'preview')} title="Create file or folder" disabled=${uploading}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <line x1="12" y1="5" x2="12" y2="19" />
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                    </svg>
+                                </button>
+                                ${createMenuOpen?.source === 'preview' && html`
+                                    <div class="workspace-create-menu">
+                                        <button class="workspace-menu-item" role="menuitem" onClick=${() => { setCreateMenuOpen(null); openNewFileDialog(createMenuOpen.folder); }}>📄 New file</button>
+                                        <button class="workspace-menu-item" role="menuitem" onClick=${() => { setCreateMenuOpen(null); openNewFolderDialog(createMenuOpen.folder); }}>📁 New folder</button>
+                                    </div>
+                                `}
+                            </div>
                             ${!selectedIsDir && html`
                                 <button
                                     class="workspace-download workspace-edit"
@@ -2717,5 +2806,127 @@ export function WorkspaceExplorer({
                 <div class="workspace-drag-ghost" ref=${dragGhostRef}>${dragGhost.label}</div>
             `}
         </aside>
+        ${newFileDialog && html`
+            <${NewFileDialog} folder=${newFileDialog.folder} onConfirm=${commitNewFileDialog} onCancel=${cancelNewFileDialog} />
+        `}
+        ${newFolderDialog && html`
+            <${NewFolderDialog} folder=${newFolderDialog.folder} onConfirm=${commitNewFolderDialog} onCancel=${cancelNewFolderDialog} />
+        `}
+    `;
+}
+
+// ── NewFileDialog ─────────────────────────────────────────────────────────────
+
+function NewFileDialog({ folder, onConfirm, onCancel }) {
+    const [name, setName] = useState('');
+
+    const handleSubmit = useCallback(() => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        onConfirm(trimmed);
+    }, [name, onConfirm]);
+
+    const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSubmit();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+        }
+    }, [handleSubmit, onCancel]);
+
+    useEffect(() => {
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') onCancel();
+        };
+        document.addEventListener('keydown', handleEsc);
+        return () => document.removeEventListener('keydown', handleEsc);
+    }, [onCancel]);
+
+    const displayFolder = folder === '.' ? '/' : `/${folder}`;
+
+    return html`
+        <${BodyPortal} className="new-file-dialog-portal">
+            <div class="new-file-dialog-backdrop" onClick=${(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+                <div class="new-file-dialog">
+                    <div class="new-file-dialog-header">New file</div>
+                    <div class="new-file-dialog-folder">${displayFolder}</div>
+                    <input
+                        class="new-file-dialog-input"
+                        type="text"
+                        value=${name}
+                        placeholder="filename.md"
+                        spellcheck=${false}
+                        autocomplete="off"
+                        onInput=${(e) => setName(e.target.value)}
+                        onKeyDown=${handleKeyDown}
+                        ref=${(el) => el && el.focus()}
+                    />
+                    <div class="new-file-dialog-actions">
+                        <button class="new-file-dialog-cancel" onClick=${onCancel}>Cancel</button>
+                        <button class="new-file-dialog-create" onClick=${handleSubmit} disabled=${!name.trim()}>Create</button>
+                    </div>
+                </div>
+            </div>
+        </${BodyPortal}>
+    `;
+}
+
+// ── NewFolderDialog ───────────────────────────────────────────────────────────
+
+function NewFolderDialog({ folder, onConfirm, onCancel }) {
+    const [name, setName] = useState('');
+
+    const handleSubmit = useCallback(() => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        onConfirm(trimmed);
+    }, [name, onConfirm]);
+
+    const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSubmit();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+        }
+    }, [handleSubmit, onCancel]);
+
+    useEffect(() => {
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') onCancel();
+        };
+        document.addEventListener('keydown', handleEsc);
+        return () => document.removeEventListener('keydown', handleEsc);
+    }, [onCancel]);
+
+    const displayFolder = folder === '.' ? '/' : `/${folder}`;
+
+    return html`
+        <${BodyPortal} className="new-file-dialog-portal">
+            <div class="new-file-dialog-backdrop" onClick=${(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+                <div class="new-file-dialog">
+                    <div class="new-file-dialog-header">New folder</div>
+                    <div class="new-file-dialog-folder">${displayFolder}</div>
+                    <input
+                        class="new-file-dialog-input"
+                        type="text"
+                        value=${name}
+                        placeholder="new-folder"
+                        spellcheck=${false}
+                        autocomplete="off"
+                        onInput=${(e) => setName(e.target.value)}
+                        onKeyDown=${handleKeyDown}
+                        ref=${(el) => el && el.focus()}
+                    />
+                    <div class="new-file-dialog-actions">
+                        <button class="new-file-dialog-cancel" onClick=${onCancel}>Cancel</button>
+                        <button class="new-file-dialog-create" onClick=${handleSubmit} disabled=${!name.trim()}>Create</button>
+                    </div>
+                </div>
+            </div>
+        </${BodyPortal}>
     `;
 }
