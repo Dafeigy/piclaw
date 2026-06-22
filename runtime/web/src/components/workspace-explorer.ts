@@ -2657,15 +2657,12 @@ export function WorkspaceExplorer({
                                         <button
                                             class="workspace-folder-upload"
                                             data-folder-hint-target=${node.path}
-                                            title="Add folder hint to compose"
-                                            aria-label=${`Add folder hint for ${node.path}`}
+                                            title="reference this folder to compose"
+                                            aria-label=${`Reference ${node.path} in compose`}
                                             onClick=${handleFolderHintClick}
                                         >
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                                                <path d="M12 11v6"/>
-                                                <path d="M9 14h6"/>
+                                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                                <text x="12" y="18" text-anchor="middle" font-size="20" font-weight="bold" font-family="monospace">@</text>
                                             </svg>
                                         </button>
                                         <button
@@ -2744,14 +2741,11 @@ export function WorkspaceExplorer({
                                         class="workspace-download"
                                         data-folder-hint-target=${selectedPath}
                                         onClick=${handleFolderHintClick}
-                                        title="Add folder hint to compose"
-                                        aria-label=${`Add folder hint for ${selectedPath}`}
+                                        title="reference this folder to compose"
+                                        aria-label=${`Reference ${selectedPath} in compose`}
                                     >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                                            <path d="M12 11v6"/>
-                                            <path d="M9 14h6"/>
+                                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                            <text x="12" y="18" text-anchor="middle" font-size="20" font-weight="bold" font-family="monospace">@</text>
                                         </svg>
                                     </button>
                                     <button class="workspace-download" onClick=${handleUploadButtonClick}
